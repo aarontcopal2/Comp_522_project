@@ -140,7 +140,3 @@ bool Search(MarkPtrType *head, KeyType key) {
     *hp2 = NULL;
     return result;
 }
-
-int main() {
-    
-}

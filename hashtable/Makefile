@@ -5,12 +5,13 @@ CC=/home/atc8/software/spack/opt/spack/linux-centos8-skylake/gcc-8.3.1/gcc-8.3.0
 OPT=-g
 CXX_VERSION=
 LIBS=-latomic -lpthread
-BUILD_DIR=hashtable/build
+MKDIR_P = mkdir -p
 
-all:
-	$(MAKE) -C "hashtable" all
-	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o main main.c $(BUILD_DIR)/Split-Ordered-Lists.o $(BUILD_DIR)/Micheal-Lock-Free-List.o
+all: Micheal-Lock-Free-List.c Split-Ordered-Lists.c
+	$(MKDIR_P) build
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/Micheal-Lock-Free-List.o Micheal-Lock-Free-List.c -c
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/Split-Ordered-Lists.o Split-Ordered-Lists.c -c
+	
 
 clean:
-	$(MAKE) -C "hashtable" clean
-	rm main
+	rm -r build/

@@ -113,7 +113,14 @@ static void set_bucket(uint bucket, NodeType *head) {
 
 
 static uint get_parent(uint bucket) {
-    // to-do
+    // parent will differ with child bucket at 1st 1bit of child from left
+    // parent will have that bit set to 0
+    for (int i = 31; i >= 0; ++i) {
+        if (bucket & (1 << i)) {
+            return (bucket & ~(1 << i));
+        }
+    }
+    return 0;   //0 is the 1st node
 }
 
 

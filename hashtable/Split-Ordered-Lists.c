@@ -1,4 +1,6 @@
 /* 
+* "Split-Ordered Lists: Lock-Free Extensible Hash Tables" by Ori Shalev & Nir Shavit
+* 
 * Split-Order-Lists is implemented on top of Micheal-Lock-Free-List
 * 2 datastructures: linkedlist with nodes + expanding array of pointers into the list
 * bucket array initially has size 2, and is doubled when no. of items in the table exceeds size*L (size is size after previous resize, L is no.of items in a bucket)
@@ -20,7 +22,6 @@
 // local includes
 //******************************************************************************
 
-#include "Micheal-Lock-Free-List.h"
 #include "Split-Ordered-Lists.h"
 
 
@@ -41,9 +42,9 @@
 
 /* shared variables */
 typedef MarkPtrType* segment_t[SEGMENT_SIZE];
-segment_t ST[100];      // buckets (Note that the 100 is harcoded and should be made dynamic)
-atomic_ullong count;    // total nodes in hash table
-uint size;              // hash table size
+segment_t ST[2];      // buckets (Note that the 100 is harcoded and should be made dynamic)
+atomic_ullong count = 0;    // total nodes in hash table
+uint size = 2;              // hash table size
 
 /* thread private variables
 MarkPtrType *prev;
@@ -56,6 +57,30 @@ MarkPtrType <cmark, next>;
 //******************************************************************************
 // private operations
 //******************************************************************************
+
+static uint reverse_bits(t_key key) {
+    // reversing the key bits and inserting them in order in the linkedlist removes the additional sorting step during splitting of buckets
+    // TO-DO: need to use a lookup table
+    t_key reverse_key = 0;
+    for (int i = 0; i < 32; ++i) {
+        t_key t = (key & (1 << i)) >> i;
+        reverse_key |= (t << (31 - i));
+    }
+    return reverse_key;
+}
+
+
+static so_key_t so_regular_key(t_key key) {
+    // assuming we are dealing with 64bit keys
+    // setting MSB to 1 for regular keys
+    return reverse_bits(key | 0x8000000000000000);
+}
+
+
+static so_key_t so_dummy_key(t_key key) {
+    return reverse_bits(key);
+}
+
 
 static MarkPtrType* get_bucket(uint bucket) {
     uint segment = bucket / SEGMENT_SIZE;
@@ -100,7 +125,7 @@ static void initialize_bucket(uint bucket) {
         initialize_bucket(parent);
     }
     NodeType *dummy = malloc(sizeof(NodeType));
-    dummy->key = (so_key_t)(uintptr_t)bucket;
+    dummy->key = so_dummy_key(bucket);      // is this param correct?
     // do we need to save the hash inside the node?
 
     /* if another thread began initialization of the same bucket, but didnt complete then adding dummy again will fail
@@ -123,25 +148,15 @@ static uint64_t fetch_and_decrement_count() {
 }
 
 
-static uint so_regularkey() {
-
-}
-
-
-static uint reverse_value() {
-    // need to use a table
-}
-
-
 
 //******************************************************************************
 // interface operations
 //******************************************************************************
 
-bool insert(so_key_t key, val_t val) {
+bool map_insert(t_key key, val_t val) {
     // inside the node, key is stored in split-ordered form
     NodeType *node = malloc(sizeof(NodeType));
-    node->key = so_regularkey(key);
+    node->key = so_regular_key(key);
     node->val = val;
     // do we need to save the hash inside the node?
 
@@ -170,7 +185,7 @@ bool insert(so_key_t key, val_t val) {
 
 
 // need to return value
-bool find(so_key_t key) {
+bool map_find(t_key key) {
     uint bucket = key % size;
 
     MarkPtrType *bucket_ptr = get_bucket(bucket);
@@ -178,11 +193,11 @@ bool find(so_key_t key) {
     if (bucket_ptr == UNINITIALIZED) {
         initialize_bucket(bucket);
     }
-    return list_search(bucket_ptr, so_regularkey(key));
+    return list_search(bucket_ptr, so_regular_key(key));
 }
 
 
-bool delete(so_key_t key) {
+bool map_delete(t_key key) {
     uint bucket = key % size;
 
     MarkPtrType *bucket_ptr = get_bucket(bucket);
@@ -190,7 +205,7 @@ bool delete(so_key_t key) {
     if (bucket_ptr == UNINITIALIZED) {
         initialize_bucket(bucket);
     }
-    if (!list_delete(bucket_ptr, so_regularkey(key))) {
+    if (!list_delete(bucket_ptr, so_regular_key(key))) {
         return false;
     }
 

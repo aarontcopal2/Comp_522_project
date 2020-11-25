@@ -16,6 +16,7 @@
 
 typedef unsigned int uint;
 typedef uint so_key_t;
+typedef uint t_key;
 typedef void* val_t;
 
 

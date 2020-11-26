@@ -131,6 +131,8 @@ bool list_insert(MarkPtrType *head, NodeType *node) {
             break;
         }
 
+        // since we are calling find, we are inserting the element in a sorted order in the list
+        // sort order is based on split-order i.e reversed bits
         // creating a link from prev->node and node->cur (while removing prev->cur)
         node->next = create_mark_pointer(get_node(cur), 0);
         MarkPtrType expected = create_mark_pointer(get_node(cur), 0);

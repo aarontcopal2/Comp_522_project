@@ -21,6 +21,12 @@
 // interface operations
 //******************************************************************************
 
+void initialize_hashtable
+(
+    void
+);
+
+
 bool map_insert
 (
     t_key key,

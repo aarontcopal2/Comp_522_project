@@ -15,7 +15,7 @@
 
 #include <stdlib.h>     // NULL
 #include <stdatomic.h>  // atomic_fetch_add
- 
+#include <pthread.h>    // pthread_setspecific, pthread_key_t
 
 
 //******************************************************************************
@@ -42,9 +42,10 @@
 
 /* shared variables */
 typedef MarkPtrType* segment_t[SEGMENT_SIZE];
-segment_t ST[2];      // buckets (Note that the 100 is harcoded and should be made dynamic)
+segment_t ST[2];            // buckets (Note that the 100 is harcoded and should be made dynamic)
 atomic_ullong count = 0;    // total nodes in hash table
 uint size = 2;              // hash table size
+typedef void* gpointer;
 
 /* thread private variables
 MarkPtrType *prev;
@@ -82,6 +83,41 @@ static so_key_t so_dummy_key(t_key key) {
 }
 
 
+static bool is_dummy_node(so_key_t key) {
+    return (key & 0x01) == 0;
+}
+
+
+static gpointer* get_thread_hazard_pointers() {
+    pthread_key_t hazard_pointers_key;
+    gpointer *hp = pthread_getspecific(hazard_pointers_key);
+
+    if (!hp) {
+        hp = malloc(sizeof(gpointer)*3);
+        pthread_setspecific(hazard_pointers_key, hp);
+    }
+    return hp;
+}
+
+
+static NodeType* get_hazard_pointer(int index) {
+    return (NodeType*)get_thread_hazard_pointers()[index];
+}
+
+
+static gpointer set_hazard_pointer(NodeType* node, int index) {
+    get_thread_hazard_pointers()[index] = node;
+}
+
+
+static void clear_hazard_pointers() {
+    gpointer *hp = get_thread_hazard_pointers();
+    hp[0] = NULL;
+    hp[1] = NULL;
+    hp[2] = NULL;
+}
+
+
 static MarkPtrType* get_bucket(uint bucket) {
     uint segment = bucket / SEGMENT_SIZE;
 
@@ -108,6 +144,7 @@ static void set_bucket(uint bucket, NodeType *head) {
             free(new_segment);
         }
     }
+    free(null_segment);
     ST[segment][bucket % SEGMENT_SIZE] = &head;
 }
 
@@ -127,7 +164,7 @@ static uint get_parent(uint bucket) {
 static void initialize_bucket(uint bucket) {
     MarkPtrType cur;
     uint parent = get_parent(bucket);
-    MarkPtrType *parent_bucket_ptr = get_bucket(bucket);
+    MarkPtrType *parent_bucket_ptr = get_bucket(parent);
     if (parent_bucket_ptr == UNINITIALIZED) {
         initialize_bucket(parent);
     }
@@ -137,6 +174,8 @@ static void initialize_bucket(uint bucket) {
 
     /* if another thread began initialization of the same bucket, but didnt complete then adding dummy again will fail
     * if so, we delete allocated dummy node of current thread and instead use the dummy node of the successful thread(cur points to the dummy node of that thread) */
+    
+
     if (!list_insert(parent_bucket_ptr, dummy)) {
         free(dummy);
         dummy = cur;
@@ -159,6 +198,17 @@ static uint64_t fetch_and_decrement_count() {
 //******************************************************************************
 // interface operations
 //******************************************************************************
+
+void initialize_hashtable () {
+    // adding a dummy node for key = 0. Without this node, intialize bucket calls to bucket=0 will be stuck in an infinite loop
+    t_key start_key = 0;
+    NodeType *start_node = malloc(sizeof(NodeType));
+    start_node->key = so_dummy_key(0);
+    start_node->next = NULL;
+    set_bucket(start_key, start_node);
+    //ST[0][0] = &node;
+}
+
 
 bool map_insert(t_key key, val_t val) {
     // inside the node, key is stored in split-ordered form

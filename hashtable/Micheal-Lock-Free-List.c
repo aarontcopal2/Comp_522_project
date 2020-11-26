@@ -9,6 +9,7 @@
 
 #include <stdlib.h>     // NULL
 #include <stdatomic.h>  // atomic_fetch_add
+#include <pthread.h>    // pthread_setspecific, pthread_key_t
 
 
 
@@ -25,18 +26,7 @@
 //******************************************************************************
 
 // #define atomic_load(p)  ({ typeof(*p) __tmp = *(p); load_barrier (); __tmp; })
-
-
-
-//******************************************************************************
-// local data
-//******************************************************************************
-
-/* thread private variables
-MarkPtrType *prev;
-MarkPtrType <pmark, cur>;
-MarkPtrType <cmark, next>;
-*/
+typedef void* gpointer;
 
 
 
@@ -60,14 +50,43 @@ static uintptr_t get_mask_bit(MarkPtrType m_ptr) {
 }
 
 
-// P.S: Arent hazard pointers missing?
+static gpointer* get_thread_hazard_pointers() {
+    pthread_key_t hazard_pointers_key;
+    gpointer *hp = pthread_getspecific(hazard_pointers_key);
+
+    if (!hp) {
+        hp = malloc(sizeof(gpointer)*3);
+        pthread_setspecific(hazard_pointers_key, hp);
+    }
+    return hp;
+}
+
+
+static NodeType* get_hazard_pointer(int index) {
+    return (NodeType*)get_thread_hazard_pointers()[index];
+}
+
+
+static gpointer set_hazard_pointer(NodeType* node, int index) {
+    get_thread_hazard_pointers()[index] = node;
+}
+
+
+static void clear_hazard_pointers() {
+    gpointer *hp = get_thread_hazard_pointers();
+    hp[0] = NULL;
+    hp[1] = NULL;
+    hp[2] = NULL;
+}
+
+
 static bool list_find(NodeType **head, so_key_t key) {
     MarkPtrType *prev, cur, next;
 
     try_again:
         prev = head;
         cur = get_node(*prev)->next;
-        // *hp1 = cur;
+        set_hazard_pointer(cur, 1);
         if (atomic_load(prev) != create_mark_pointer(get_node(cur), 0)) {
             goto try_again;
         }
@@ -78,7 +97,7 @@ static bool list_find(NodeType **head, so_key_t key) {
             }
             bool cmark = get_mask_bit(cur);
             next = get_node(cur)->next;
-            // *hp0 = next;
+            set_hazard_pointer(next, 0);
             so_key_t ckey = cur->key;
             if (atomic_load(prev) != create_mark_pointer(get_node(cur), 0)) {
                 goto try_again;
@@ -88,7 +107,7 @@ static bool list_find(NodeType **head, so_key_t key) {
                     return ckey == key;
                 }
                 prev = &get_node(cur)->next;
-                // *hp2 = cur;
+                set_hazard_pointer(cur, 2);
             } else {
                 MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
                 if (atomic_compare_exchange_strong(prev,
@@ -99,7 +118,7 @@ static bool list_find(NodeType **head, so_key_t key) {
                 }
             }
             cur = next;
-            // *hp1 = next;
+            set_hazard_pointer(next, 1);
         }
 }
 
@@ -111,11 +130,7 @@ static bool list_find(NodeType **head, so_key_t key) {
 
 bool list_search(MarkPtrType *head, so_key_t key) {
     bool result = list_find(head, key);
-    /*
-    *hp0 = NULL;
-    *hp1 = NULL;
-    *hp2 = NULL;
-    */
+    clear_hazard_pointers();
     return result;
 }
 
@@ -141,11 +156,7 @@ bool list_insert(MarkPtrType *head, NodeType *node) {
             break;
         }
     }
-    /*
-        *hp0 = NULL;
-        *hp1 = NULL;
-        *hp2 = NULL;
-    */
+    clear_hazard_pointers();
     return result;
 }
 
@@ -171,10 +182,6 @@ bool list_delete(MarkPtrType *head, so_key_t key) {
             result = true;
         }
     }
-    /*
-        *hp0 = NULL;
-        *hp1 = NULL;
-        *hp2 = NULL;
-    */
-   return result;
+    clear_hazard_pointers();
+    return result;
 }

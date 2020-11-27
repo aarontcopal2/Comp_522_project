@@ -7,6 +7,7 @@
 
 #include <stdbool.h>     // bool, false, true
 #include <stdint.h>     // uint64_t, uintptr_t
+#include <stdio.h>      // printf
 
 
 
@@ -47,7 +48,7 @@ void retire_node
 );
 
 
-bool list_search
+MarkPtrType list_search
 (
     MarkPtrType head,
     so_key_t key

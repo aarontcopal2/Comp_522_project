@@ -10,7 +10,6 @@
 #include <stdlib.h>     // NULL
 #include <stdatomic.h>  // atomic_fetch_add
 #include <pthread.h>    // pthread_setspecific, pthread_key_t
-#include <stdio.h>      // printf
 
 
 
@@ -81,11 +80,10 @@ static void clear_hazard_pointers() {
 }
 
 
-static bool list_find(NodeType *head, so_key_t key) {
-    printf("list_find: %d\n", key);
+static MarkPtrType list_find(NodeType *head, so_key_t key, MarkPtrType *out_prev) {
+    printf("list_find: %u\n", key);
     MarkPtrType prev, cur, next;
 
-    printf("test0\n");
     try_again:
         prev = head;
         cur = get_node(prev)->next;
@@ -93,26 +91,24 @@ static bool list_find(NodeType *head, so_key_t key) {
         if (atomic_load(prev) != create_mark_pointer(get_node(cur), 0)) {
             goto try_again;
         }*/
-        printf("test2\n");
         while(true) {
             NodeType *temp = get_node(cur);
             if (temp == NULL) {
                 printf("get_node(cur) is null\n");
             }
             if (get_node(cur) == NULL) {
-                return false;
+                goto done;
             }
             bool cmark = get_mask_bit(cur);
             next = get_node(cur)->next;
-            so_key_t ckey = cur->key;
+            so_key_t ckey = cur->so_key;
             set_hazard_pointer(next, 0);
             if (atomic_load(&cur) != create_mark_pointer(get_node(next), cmark)) {
                 goto try_again;
             }
-            printf("test3\n");
             if (!cmark) {
                 if (ckey >= key) {
-                    return ckey == key;
+                    goto done;
                 }
                 prev = get_node(cur)->next;
                 set_hazard_pointer(cur, 2);
@@ -128,7 +124,9 @@ static bool list_find(NodeType *head, so_key_t key) {
             cur = next;
             set_hazard_pointer(next, 1);
         }
-        printf("test4\n");
+    done:
+        *out_prev = prev;
+        return cur;
 }
 
 
@@ -149,21 +147,23 @@ void retire_node(NodeType *node) {
 }
 
 
-bool list_search(MarkPtrType head, so_key_t key) {
-    bool result = list_find(head, key);
+MarkPtrType list_search(MarkPtrType head, so_key_t key) {
+    MarkPtrType *prev;
+    MarkPtrType node = list_find(head, key, prev);
     clear_hazard_pointers();
-    return result;
+    return node;
 }
 
 
 bool list_insert(MarkPtrType head, NodeType *node) {
     printf("list_insert: %p\n", node);
     bool result;
-    MarkPtrType cur, *prev;
+    MarkPtrType cur, prev;
     so_key_t so_key = node->so_key;
 
     while (true) {
-        if (list_find(head, so_key)) {
+        cur = list_find(head, so_key, &prev);
+        if (cur) {
             result = false;
             break;
         }
@@ -173,7 +173,7 @@ bool list_insert(MarkPtrType head, NodeType *node) {
         // creating a link from prev->node and node->cur (while removing prev->cur)
         node->next = create_mark_pointer(get_node(cur), 0);
         MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
-        if (atomic_compare_exchange_strong(prev, &expected, create_mark_pointer(node, 0))) {
+        if (atomic_compare_exchange_strong(&(prev->next), &expected, create_mark_pointer(node, 0))) {
             result = true;
             break;
         }
@@ -188,7 +188,8 @@ bool list_delete(MarkPtrType head, so_key_t key) {
     MarkPtrType cur, next, *prev;
 
     while (true) {
-        if (!list_find(head, key)) {
+        MarkPtrType node = list_find(head, key, prev);
+        if (!node) {
             result = false;
             break;
         }
@@ -200,7 +201,7 @@ bool list_delete(MarkPtrType head, so_key_t key) {
         if (atomic_compare_exchange_strong(prev, &expected, create_mark_pointer(next, 0))) {
             retire_node(cur);
         } else {
-            list_find(head, key); // Note: Kumpera implementation commented this
+            list_find(head, key, prev); // Note: Kumpera implementation commented this
             result = true;
         }
     }

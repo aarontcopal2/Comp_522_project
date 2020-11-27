@@ -30,5 +30,9 @@ int main () {
     address addr = {232, "Maroneal Street"}; 
     val_t val = (void*)&addr;
     status = map_insert(key, val);
-    
+    printf("status map_insert:1: %d\n", status);
+
+    status = map_search(key);
+    printf("status map_search:1: %d\n", status);
+
 }

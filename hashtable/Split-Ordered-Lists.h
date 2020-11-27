@@ -34,7 +34,7 @@ bool map_insert
 );
 
 
-bool map_find
+bool map_search
 (
     t_key key
 );

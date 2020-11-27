@@ -15,7 +15,6 @@
 
 #include <stdlib.h>     // NULL
 #include <stdatomic.h>  // atomic_fetch_add
-#include <stdio.h>      // printf
 
 
 
@@ -72,9 +71,9 @@ static uint reverse_bits(t_key key) {
 
 
 static so_key_t so_regular_key(t_key key) {
-    // assuming we are dealing with 64bit keys
+    // assuming we are dealing with 32bit keys
     // setting MSB to 1 for regular keys
-    return reverse_bits(key | 0x8000000000000000);
+    return reverse_bits(key | 0x80000000);
 }
 
 
@@ -89,7 +88,7 @@ static bool is_dummy_node(so_key_t key) {
 
 
 static MarkPtrType get_bucket(uint bucket) {
-    printf("get_bucket: %d\n", bucket);
+    printf("get_bucket: %u\n", bucket);
     uint segment = bucket / SEGMENT_SIZE;
 
     // bucket not initialized, hence segment is NULL
@@ -101,7 +100,7 @@ static MarkPtrType get_bucket(uint bucket) {
 
 
 static void set_bucket(uint bucket, NodeType *head) {
-    printf("set_bucket: %d\n", bucket);
+    printf("set_bucket: %u\n", bucket);
     uint segment = bucket / SEGMENT_SIZE;
     MarkPtrType *null_segment = (MarkPtrType*)calloc(sizeof(MarkPtrType)*SEGMENT_SIZE, 0);
 
@@ -122,7 +121,7 @@ static void set_bucket(uint bucket, NodeType *head) {
 
 
 static uint get_parent(uint bucket) {
-    printf("get_parent: %d\n", bucket);
+    printf("get_parent: %u\n", bucket);
     // parent will differ with child bucket at 1st 1bit of child from left
     // parent will have that bit set to 0
     for (int i = 31; i >= 0; ++i) {
@@ -134,16 +133,15 @@ static uint get_parent(uint bucket) {
 }
 
 
-static void initialize_bucket(uint bucket) {
-    printf("initialize_bucket: %d\n", bucket);
+static MarkPtrType initialize_bucket(uint bucket) {
+    printf("initialize_bucket: %u\n", bucket);
 
     MarkPtrType cur;
     uint parent = get_parent(bucket);
     MarkPtrType parent_bucket_ptr = get_bucket(parent);
     if (parent_bucket_ptr == UNINITIALIZED) {
-        initialize_bucket(parent);
+        parent_bucket_ptr = initialize_bucket(parent);
     }
-    printf("test1\n");
     NodeType *dummy = malloc(sizeof(NodeType));
     dummy->so_key = so_dummy_key(bucket);      // is this param correct?
     dummy->key = bucket;
@@ -153,14 +151,12 @@ static void initialize_bucket(uint bucket) {
     /* if another thread began initialization of the same bucket, but didnt complete then adding dummy again will fail
     * if so, we delete allocated dummy node of current thread and instead use the dummy node of the successful thread(cur points to the dummy node of that thread) */
     
-    printf("test2\n");
     if (!list_insert(parent_bucket_ptr, dummy)) {
         retire_node(dummy);
         dummy = cur;
     }
-    printf("test3\n");
     set_bucket(bucket, dummy);
-    printf("test4\n");
+    return get_bucket(bucket);
 }
 
 
@@ -195,21 +191,21 @@ void initialize_hashtable () {
 
 
 bool map_insert(t_key key, val_t val) {
-    printf("map_insert: %d\n", key);
+    printf("map_insert: %u\n", key);
+    uint bucket = key % size;
+
+    // intialize bucket if not already done
+    MarkPtrType bucket_ptr = get_bucket(bucket);
+    if (bucket_ptr == UNINITIALIZED) {
+        bucket_ptr = initialize_bucket(bucket);
+    }
+
     // inside the node, key is stored in split-ordered form
     NodeType *node = malloc(sizeof(NodeType));
     node->so_key = so_regular_key(key);
     node->key = key;
     node->val = val;
     // do we need to save the hash inside the node?
-
-    uint bucket = key % size;
-
-    // intialize bucket if not already done
-    MarkPtrType bucket_ptr = get_bucket(bucket);
-    if (bucket_ptr == UNINITIALIZED) {
-        initialize_bucket(bucket);
-    }
 
     // in what scenarios will insert fail?
     if (!list_insert(bucket_ptr, node)) {
@@ -222,13 +218,14 @@ bool map_insert(t_key key, val_t val) {
     // If the load factor of the hashtable > MAX_LOAD, double the hash table size
     if (fetch_and_increment_count(&count) / csize > MAX_LOAD) {
         atomic_compare_exchange_strong(&size, &csize, 2*csize);
+        // how do we append segment_t to ST?
     }
     return true;
 }
 
 
 // need to return value
-bool map_find(t_key key) {
+bool map_search(t_key key) {
     uint bucket = key % size;
 
     MarkPtrType bucket_ptr = get_bucket(bucket);

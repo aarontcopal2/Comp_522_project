@@ -29,7 +29,8 @@ typedef NodeType* MarkPtrType;
 
 //Node: contains key and next pointer
 struct __node {
-    so_key_t key;
+    so_key_t so_key;
+    t_key key;
     val_t val;
     MarkPtrType next;
 };
@@ -40,24 +41,29 @@ struct __node {
 // interface operations
 //******************************************************************************
 
+void retire_node
+(
+    NodeType *node
+);
+
 
 bool list_search
 (
-    MarkPtrType *head,
+    MarkPtrType head,
     so_key_t key
 );
 
 
 bool list_insert
 (
-    MarkPtrType *head,
+    MarkPtrType head,
     NodeType *node
 );
 
 
 bool list_delete
 (
-    MarkPtrType *head,
+    MarkPtrType head,
     so_key_t key
 );
 

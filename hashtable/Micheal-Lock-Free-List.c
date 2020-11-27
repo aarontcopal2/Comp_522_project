@@ -10,6 +10,7 @@
 #include <stdlib.h>     // NULL
 #include <stdatomic.h>  // atomic_fetch_add
 #include <pthread.h>    // pthread_setspecific, pthread_key_t
+#include <stdio.h>      // printf
 
 
 
@@ -80,39 +81,46 @@ static void clear_hazard_pointers() {
 }
 
 
-static bool list_find(NodeType **head, so_key_t key) {
-    MarkPtrType *prev, cur, next;
+static bool list_find(NodeType *head, so_key_t key) {
+    printf("list_find: %d\n", key);
+    MarkPtrType prev, cur, next;
 
+    printf("test0\n");
     try_again:
         prev = head;
-        cur = get_node(*prev)->next;
-        set_hazard_pointer(cur, 1);
+        cur = get_node(prev)->next;
+        /*set_hazard_pointer(cur, 1);
         if (atomic_load(prev) != create_mark_pointer(get_node(cur), 0)) {
             goto try_again;
-        }
-
-        while(1) {
+        }*/
+        printf("test2\n");
+        while(true) {
+            NodeType *temp = get_node(cur);
+            if (temp == NULL) {
+                printf("get_node(cur) is null\n");
+            }
             if (get_node(cur) == NULL) {
                 return false;
             }
             bool cmark = get_mask_bit(cur);
             next = get_node(cur)->next;
-            set_hazard_pointer(next, 0);
             so_key_t ckey = cur->key;
-            if (atomic_load(prev) != create_mark_pointer(get_node(cur), 0)) {
+            set_hazard_pointer(next, 0);
+            if (atomic_load(&cur) != create_mark_pointer(get_node(next), cmark)) {
                 goto try_again;
             }
+            printf("test3\n");
             if (!cmark) {
                 if (ckey >= key) {
                     return ckey == key;
                 }
-                prev = &get_node(cur)->next;
+                prev = get_node(cur)->next;
                 set_hazard_pointer(cur, 2);
             } else {
                 MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
-                if (atomic_compare_exchange_strong(prev,
+                if (atomic_compare_exchange_strong(&prev,
                         &expected, create_mark_pointer(get_node(next), 0))) {
-                    free(cur);      // is it ok to free cur?
+                    retire_node(cur);
                 } else {
                     goto try_again;
                 }
@@ -120,6 +128,7 @@ static bool list_find(NodeType **head, so_key_t key) {
             cur = next;
             set_hazard_pointer(next, 1);
         }
+        printf("test4\n");
 }
 
 
@@ -128,20 +137,33 @@ static bool list_find(NodeType **head, so_key_t key) {
 // interface operations
 //******************************************************************************
 
-bool list_search(MarkPtrType *head, so_key_t key) {
+void retire_node(NodeType *node) {
+    // rlist,rcount is a thread private list
+    // RETIRE_THRESHOLD = H + omega(H); where H is total no. of hazard pointers
+    /*rlist.push(node);
+    rcount++;
+    if (rcount >= RETIRE_THRESHOLD) {
+        Scan(array of hazard pointers);
+    }
+    */
+}
+
+
+bool list_search(MarkPtrType head, so_key_t key) {
     bool result = list_find(head, key);
     clear_hazard_pointers();
     return result;
 }
 
 
-bool list_insert(MarkPtrType *head, NodeType *node) {
+bool list_insert(MarkPtrType head, NodeType *node) {
+    printf("list_insert: %p\n", node);
     bool result;
     MarkPtrType cur, *prev;
-    so_key_t key = node->key;
+    so_key_t so_key = node->so_key;
 
-    while (1) {
-        if (list_find(head, key)) {
+    while (true) {
+        if (list_find(head, so_key)) {
             result = false;
             break;
         }
@@ -161,11 +183,11 @@ bool list_insert(MarkPtrType *head, NodeType *node) {
 }
 
 
-bool list_delete(MarkPtrType *head, so_key_t key) {
+bool list_delete(MarkPtrType head, so_key_t key) {
     bool result;
     MarkPtrType cur, next, *prev;
 
-    while (1) {
+    while (true) {
         if (!list_find(head, key)) {
             result = false;
             break;
@@ -176,7 +198,7 @@ bool list_delete(MarkPtrType *head, so_key_t key) {
         }
         expected = create_mark_pointer(cur, 0);
         if (atomic_compare_exchange_strong(prev, &expected, create_mark_pointer(next, 0))) {
-            free(cur);       // is it ok to free cur?
+            retire_node(cur);
         } else {
             list_find(head, key); // Note: Kumpera implementation commented this
             result = true;

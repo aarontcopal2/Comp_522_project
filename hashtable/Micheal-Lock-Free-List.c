@@ -136,6 +136,7 @@ static MarkPtrType list_find(NodeType *head, so_key_t key, MarkPtrType *out_prev
 //******************************************************************************
 
 void retire_node(NodeType *node) {
+    printf("retiring node: %u\n", node->key);
     // rlist,rcount is a thread private list
     // RETIRE_THRESHOLD = H + omega(H); where H is total no. of hazard pointers
     /*rlist.push(node);
@@ -188,13 +189,14 @@ bool list_delete(MarkPtrType head, so_key_t key) {
     MarkPtrType cur, next, prev;
 
     while (true) {
-        MarkPtrType node = list_find(head, key, &prev);
-        if (!node) {
+        cur = list_find(head, key, &prev);
+        if (!cur || cur->so_key != key) {
             result = false;
             break;
         }
+        next = get_hazard_pointer(0);
         MarkPtrType expected = create_mark_pointer(next, 0);
-        if (!atomic_compare_exchange_strong(&(get_node(cur)->next), &expected, create_mark_pointer(next, 1))) {
+        if (!atomic_compare_exchange_strong(&(cur->next), &expected, create_mark_pointer(next, 1))) {
             continue;
         }
         expected = create_mark_pointer(cur, 0);
@@ -202,8 +204,9 @@ bool list_delete(MarkPtrType head, so_key_t key) {
             retire_node(cur);
         } else {
             list_find(head, key, &prev); // Note: Kumpera implementation commented this
-            result = true;
         }
+        result = true;
+        break;
     }
     clear_hazard_pointers();
     return result;

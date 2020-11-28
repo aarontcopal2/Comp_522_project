@@ -225,7 +225,7 @@ bool map_insert(t_key key, val_t val) {
 
 
 // need to return value
-bool map_search(t_key key) {
+val_t map_search(t_key key) {
     uint bucket = key % size;
 
     MarkPtrType bucket_ptr = get_bucket(bucket);
@@ -233,7 +233,11 @@ bool map_search(t_key key) {
     if (bucket_ptr == UNINITIALIZED) {
         initialize_bucket(bucket);
     }
-    return list_search(bucket_ptr, so_regular_key(key));
+    MarkPtrType result = list_search(bucket_ptr, so_regular_key(key));
+    if (result && result->val) {
+        return result->val;
+    }
+    return NULL;
 }
 
 

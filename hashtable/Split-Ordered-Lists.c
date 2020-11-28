@@ -15,6 +15,7 @@
 
 #include <stdlib.h>     // NULL
 #include <stdatomic.h>  // atomic_fetch_add
+#include <string.h>     // memcpy
 
 
 
@@ -141,6 +142,13 @@ static MarkPtrType initialize_bucket(uint bucket) {
     /* if another thread began initialization of the same bucket, but didnt complete then adding dummy again will fail
     * if so, we delete allocated dummy node of current thread and instead use the dummy node of the successful thread(cur points to the dummy node of that thread) */
     
+    /* As the table size increases, the bucket values calucated for a key will either stay same or increase.
+    * and if the bucket values increase, the first initialization call for that bucket will create a link from
+    * parent bucket to new bucket's dummy node. This will ensure that:
+    * 1. If a thread has old value of size and peforms some operation after this insertion on old bucket,
+    * it can access the elements from the appended bucket 
+    * 2. Operations accessing the parent bucket will be able to insert elements in the child bucket if thats
+    * needed to maintain the list order */
     if (!list_insert(parent_bucket_ptr, dummy)) {
         retire_node(dummy);
         dummy = cur;
@@ -157,6 +165,28 @@ static uint64_t fetch_and_increment_count() {
 
 static uint64_t fetch_and_decrement_count() {
     return atomic_fetch_add(&count, -1);
+}
+
+
+static void resize_hashtable() {
+    uint csize = size;
+    segment_t *old_ST = ST;
+    segment_t *new_ST = malloc(sizeof(segment_t) * csize * 2);
+    /* will this operation need to be done using a lock?
+    * Else we may loose some insertions happening between memcpy and changing swapping of new table with old
+    * Fix1: use hazard pointers for ST. One pointer per thread */
+    memcpy(new_ST, ST, sizeof(segment_t) * csize);
+
+    if (!atomic_compare_exchange_strong(&size, &csize, 2*csize)) {
+        // a concurrent thread already incremented the size
+        free(new_ST);
+        return;
+    }
+
+    if (!atomic_compare_exchange_strong(&ST, old_ST, new_ST)) {
+        // a concurrent thread already switched the table pointer
+        free(new_ST);
+    }
 }
 
 
@@ -204,12 +234,10 @@ bool map_insert(t_key key, val_t val) {
         return false;
     }
 
-    uint csize = size;
     // if insertion is succesful, increment the count of nodes.
-    // If the load factor of the hashtable > MAX_LOAD, double the hash table size
-    if (fetch_and_increment_count(&count) / csize > MAX_LOAD) {
-        atomic_compare_exchange_strong(&size, &csize, 2*csize);
-        // how do we append segment_t to ST?
+    // If the load factor of the hashtable > MAX_LOAD, resize the hash table
+    if (fetch_and_increment_count(&count) / size > MAX_LOAD) {
+        resize_hashtable();
     }
     return true;
 }

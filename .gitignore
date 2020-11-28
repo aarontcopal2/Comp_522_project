@@ -4,3 +4,6 @@ main
 
 # vscode
 .vscode/
+
+# output files
+output

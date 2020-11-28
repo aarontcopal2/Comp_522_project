@@ -97,7 +97,7 @@ static void set_bucket(uint bucket, NodeType *head) {
     printf("set_bucket: %u\n", bucket);
     uint segment = bucket / SEGMENT_SIZE;
     MarkPtrType *null_segment = (MarkPtrType*)calloc(sizeof(MarkPtrType)*SEGMENT_SIZE, 0);
-
+    // we may need to set new_segment[i-SEGMENT_SIZE] = NULL
     if (ST[segment] == NULL) {
         MarkPtrType *new_segment = (MarkPtrType*)calloc(sizeof(MarkPtrType)*SEGMENT_SIZE, 0);
         
@@ -168,7 +168,9 @@ static uint64_t fetch_and_decrement_count() {
 void initialize_hashtable () {
     ST = malloc(sizeof(segment_t) * size);
     ST[0] = (MarkPtrType*)malloc(SEGMENT_SIZE * sizeof(MarkPtrType*));
-
+    for (int i = 0; i < SEGMENT_SIZE; i++) {
+        ST[0][i] = NULL;
+    }
     // adding a dummy node for key = 0. Without this node, intialize bucket calls to bucket=0 will be stuck in an infinite loop
     t_key start_key = 0;
     NodeType *start_node = malloc(sizeof(NodeType));
@@ -185,7 +187,7 @@ bool map_insert(t_key key, val_t val) {
 
     // intialize bucket if not already done
     MarkPtrType bucket_ptr = get_bucket(bucket);
-    if (bucket_ptr == UNINITIALIZED) {
+    if (!bucket_ptr) {
         bucket_ptr = initialize_bucket(bucket);
     }
 

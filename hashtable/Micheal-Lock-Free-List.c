@@ -92,19 +92,19 @@ static MarkPtrType list_find(NodeType *head, so_key_t key, MarkPtrType *out_prev
             goto try_again;
         }*/
         while(true) {
-            NodeType *temp = get_node(cur);
-            if (temp == NULL) {
-                printf("get_node(cur) is null\n");
-            }
             if (get_node(cur) == NULL) {
                 goto done;
             }
             bool cmark = get_mask_bit(cur);
             next = get_node(cur)->next;
             so_key_t ckey = cur->so_key;
+            /* commented because cant see in kumpera implementation
             set_hazard_pointer(next, 0);
             if (atomic_load(&cur) != create_mark_pointer(get_node(next), cmark)) {
                 goto try_again;
+            }*/
+            if (prev->next != create_mark_pointer(get_node(cur), 0)) {
+               goto try_again;
             }
             if (!cmark) {
                 if (ckey >= key) {
@@ -148,8 +148,8 @@ void retire_node(NodeType *node) {
 
 
 MarkPtrType list_search(MarkPtrType head, so_key_t key) {
-    MarkPtrType *prev;
-    MarkPtrType node = list_find(head, key, prev);
+    MarkPtrType prev;
+    MarkPtrType node = list_find(head, key, &prev);
     clear_hazard_pointers();
     return node;
 }
@@ -185,10 +185,10 @@ bool list_insert(MarkPtrType head, NodeType *node) {
 
 bool list_delete(MarkPtrType head, so_key_t key) {
     bool result;
-    MarkPtrType cur, next, *prev;
+    MarkPtrType cur, next, prev;
 
     while (true) {
-        MarkPtrType node = list_find(head, key, prev);
+        MarkPtrType node = list_find(head, key, &prev);
         if (!node) {
             result = false;
             break;
@@ -198,10 +198,10 @@ bool list_delete(MarkPtrType head, so_key_t key) {
             continue;
         }
         expected = create_mark_pointer(cur, 0);
-        if (atomic_compare_exchange_strong(prev, &expected, create_mark_pointer(next, 0))) {
+        if (atomic_compare_exchange_strong(&(prev->next), &expected, create_mark_pointer(next, 0))) {
             retire_node(cur);
         } else {
-            list_find(head, key, prev); // Note: Kumpera implementation commented this
+            list_find(head, key, &prev); // Note: Kumpera implementation commented this
             result = true;
         }
     }

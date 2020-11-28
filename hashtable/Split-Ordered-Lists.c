@@ -46,12 +46,6 @@ segment_t *ST;              // buckets (2D array of Marktype pointers)
 atomic_ullong count = 0;    // total nodes in hash table
 uint size = 2;              // hash table size
 
-/* thread private variables
-MarkPtrType *prev;
-MarkPtrType <pmark, cur>;
-MarkPtrType <cmark, next>;
-*/
-
 
 
 //******************************************************************************
@@ -71,7 +65,7 @@ static uint reverse_bits(t_key key) {
 
 
 static so_key_t so_regular_key(t_key key) {
-    // assuming we are dealing with 32bit keys
+    // assuming we are dealing with 32bit keys(TO-DO: should be using 64bit keys)
     // setting MSB to 1 for regular keys
     return reverse_bits(key | 0x80000000);
 }
@@ -107,10 +101,6 @@ static void set_bucket(uint bucket, NodeType *head) {
     if (ST[segment] == NULL) {
         MarkPtrType *new_segment = (MarkPtrType*)calloc(sizeof(MarkPtrType)*SEGMENT_SIZE, 0);
         
-        /*for (int i = 0; i < SEGMENT_SIZE; i++) {
-            new_segment[i] = UNINITIALIZED;
-        }*/
-        
         if(!atomic_compare_exchange_strong(&ST[segment], null_segment, new_segment)) {
             free(new_segment);
         }
@@ -129,7 +119,7 @@ static uint get_parent(uint bucket) {
             return (bucket & ~(1 << i));
         }
     }
-    return 0;   //0 is the 1st node
+    return 0;   //0(dummy) is the 1st node i.e parent of all nodes
 }
 
 
@@ -186,7 +176,6 @@ void initialize_hashtable () {
     start_node->key = start_key;
     start_node->next = NULL;
     set_bucket(start_key, start_node);
-    //ST[0][0] = &node;
 }
 
 

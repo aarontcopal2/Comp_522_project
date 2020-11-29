@@ -4,7 +4,7 @@
 CC=/home/atc8/software/spack/opt/spack/linux-centos8-skylake/gcc-8.3.1/gcc-8.3.0-vodp4hkmzrwqjb5m45xsb7syhgwzgv57/bin/gcc
 OPT=-g
 CXX_VERSION=
-LIBS=-latomic -lpthread -fopenmp
+LIBS=-latomic -lpthread
 BUILD_DIR=hashtable/build
 
 all:

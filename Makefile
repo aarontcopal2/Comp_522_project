@@ -6,10 +6,16 @@ OPT=-g
 CXX_VERSION=
 LIBS=-latomic -lpthread
 BUILD_DIR=hashtable/build
+HELGRIND_PARAMS=--free-is-write=yes --history-level=full --show-error-list=yes
 
 all:
 	$(MAKE) -C "hashtable" all
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o main main.c $(BUILD_DIR)/Split-Ordered-Lists.o $(BUILD_DIR)/Micheal-Lock-Free-List.o
+
+
+helgrind:
+	valgrind --tool=helgrind $(HELGRIND_PARAMS) ./main
+
 
 clean:
 	$(MAKE) -C "hashtable" clean

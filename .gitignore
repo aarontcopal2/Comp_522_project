@@ -7,3 +7,4 @@ main
 
 # output files
 output
+helgrind_output

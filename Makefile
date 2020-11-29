@@ -13,8 +13,8 @@ all:
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o main main.c $(BUILD_DIR)/Split-Ordered-Lists.o $(BUILD_DIR)/Micheal-Lock-Free-List.o
 
 
-helgrind:
-	valgrind --tool=helgrind $(HELGRIND_PARAMS) ./main
+helgrind: all
+	valgrind --tool=helgrind $(HELGRIND_PARAMS) ./main > helgrind_output 2>&1
 
 
 clean:

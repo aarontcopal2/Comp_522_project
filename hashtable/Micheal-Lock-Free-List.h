@@ -8,6 +8,7 @@
 #include <stdbool.h>     // bool, false, true
 #include <stdint.h>     // uint64_t, uintptr_t
 #include <stdio.h>      // printf
+#include <valgrind/helgrind.h>  // ANNOTATE_HAPPENS_AFTER, ANNOTATE_HAPPENS_BEFORE
 
 
 
@@ -33,6 +34,7 @@ struct __node {
     so_key_t so_key;
     t_key key;
     val_t val;
+    bool isDummy;
     MarkPtrType next;
 };
 

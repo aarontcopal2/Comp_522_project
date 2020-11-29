@@ -35,6 +35,9 @@
 #define MAX_LOAD 5              // is a 5 node bucket fine?
 #define SEGMENT_SIZE 5          // is SEGMENT_SIZE = 5 ok?
 
+#define DEBUG 0
+#define debug_print(fmt, ...) \
+    do { if (DEBUG) fprintf(stderr, fmt, __VA_ARGS__); } while (0)
 
 
 //******************************************************************************
@@ -83,7 +86,7 @@ static bool is_dummy_node(so_key_t key) {
 
 
 static MarkPtrType get_bucket(uint bucket) {
-    printf("get_bucket: %u\n", bucket);
+    debug_print("get_bucket: %u\n", bucket);
     uint segment = bucket / SEGMENT_SIZE;
 
     // bucket not initialized, hence segment is NULL
@@ -95,7 +98,7 @@ static MarkPtrType get_bucket(uint bucket) {
 
 
 static void set_bucket(uint bucket, NodeType *head) {
-    printf("set_bucket: %u\n", bucket);
+    debug_print("set_bucket: %u\n", bucket);
     uint segment = bucket / SEGMENT_SIZE;
     MarkPtrType *null_segment = (MarkPtrType*)calloc(sizeof(MarkPtrType)*SEGMENT_SIZE, 0);
     // we may need to set new_segment[i-SEGMENT_SIZE] = NULL
@@ -103,7 +106,10 @@ static void set_bucket(uint bucket, NodeType *head) {
         MarkPtrType *new_segment = (MarkPtrType*)calloc(sizeof(MarkPtrType)*SEGMENT_SIZE, 0);
         
         if(!atomic_compare_exchange_strong(&ST[segment], null_segment, new_segment)) {
+            // some other thread beat us to updating the segment
             free(new_segment);
+            free(null_segment);
+            return;
         }
     }
     free(null_segment);
@@ -112,7 +118,7 @@ static void set_bucket(uint bucket, NodeType *head) {
 
 
 static uint get_parent(uint bucket) {
-    printf("get_parent: %u\n", bucket);
+    debug_print("get_parent: %u\n", bucket);
     // parent will differ with child bucket at 1st 1bit of child from left
     // parent will have that bit set to 0
     for (int i = 31; i >= 0; ++i) {
@@ -125,7 +131,7 @@ static uint get_parent(uint bucket) {
 
 
 static MarkPtrType initialize_bucket(uint bucket) {
-    printf("initialize_bucket: %u\n", bucket);
+    debug_print("initialize_bucket: %u\n", bucket);
 
     MarkPtrType cur;
     uint parent = get_parent(bucket);
@@ -133,16 +139,19 @@ static MarkPtrType initialize_bucket(uint bucket) {
     if (parent_bucket_ptr == UNINITIALIZED) {
         parent_bucket_ptr = initialize_bucket(parent);
     }
+
     NodeType *dummy = malloc(sizeof(NodeType));
     dummy->so_key = so_dummy_key(bucket);      // is this param correct?
     dummy->key = bucket;
+    dummy->isDummy = true;
     dummy->next = NULL;
+    ANNOTATE_HAPPENS_BEFORE(dummy);
     // do we need to save the hash inside the node?
 
     /* if another thread began initialization of the same bucket, but didnt complete then adding dummy again will fail
     * if so, we delete allocated dummy node of current thread and instead use the dummy node of the successful thread(cur points to the dummy node of that thread) */
     
-    /* As the table size increases, the bucket values calucated for a key will either stay same or increase.
+    /* As the table size increases, the bucket values calculated for a key will either stay same or increase.
     * and if the bucket values increase, the first initialization call for that bucket will create a link from
     * parent bucket to new bucket's dummy node. This will ensure that:
     * 1. If a thread has old value of size and peforms some operation after this insertion on old bucket,
@@ -151,9 +160,14 @@ static MarkPtrType initialize_bucket(uint bucket) {
     * needed to maintain the list order */
     if (!list_insert(parent_bucket_ptr, dummy)) {
         retire_node(dummy);
+        cur = list_search(parent_bucket_ptr, so_dummy_key(dummy->key));
         dummy = cur;
     }
     set_bucket(bucket, dummy);
+    /* we call get_bucket again rather than returning from set_bucket because some other thread may have called set_bucket and updated
+    * the bucket pointer. get_bucket is safer.
+    * TO-DO: I think the if(!list_insert()) loop will get the right dummy node and we can return dummy without calling get_bucket().*/
+
     return get_bucket(bucket);
 }
 
@@ -173,7 +187,7 @@ static void resize_hashtable() {
     segment_t *old_ST = ST;
     segment_t *new_ST = malloc(sizeof(segment_t) * csize * 2);
     /* will this operation need to be done using a lock?
-    * Else we may loose some insertions happening between memcpy and changing swapping of new table with old
+    * Else we may loose some insertions happening between memcpy and changing swapping of old table with new
     * Fix1: use hazard pointers for ST. One pointer per thread */
     memcpy(new_ST, ST, sizeof(segment_t) * csize);
 
@@ -206,13 +220,14 @@ void initialize_hashtable () {
     NodeType *start_node = malloc(sizeof(NodeType));
     start_node->so_key = so_dummy_key(start_key);
     start_node->key = start_key;
+    start_node->isDummy = true;
     start_node->next = NULL;
     set_bucket(start_key, start_node);
 }
 
 
 bool map_insert(t_key key, val_t val) {
-    printf("map_insert: %u\n", key);
+    debug_print("map_insert: %u\n", key);
     uint bucket = key % size;
 
     // intialize bucket if not already done
@@ -226,9 +241,12 @@ bool map_insert(t_key key, val_t val) {
     node->so_key = so_regular_key(key);
     node->key = key;
     node->val = val;
+    node->isDummy = false;
+    node->next = NULL;
+    
     // do we need to save the hash inside the node?
 
-    // in what scenarios will insert fail?
+    // list_insert will fail if the key already exists
     if (!list_insert(bucket_ptr, node)) {
         free(node);     // no issues with calling free() here, right?
         return false;
@@ -236,7 +254,7 @@ bool map_insert(t_key key, val_t val) {
 
     // if insertion is succesful, increment the count of nodes.
     // If the load factor of the hashtable > MAX_LOAD, resize the hash table
-    if (fetch_and_increment_count(&count) / size > MAX_LOAD) {
+    if (fetch_and_increment_count(&count) / (size * SEGMENT_SIZE) > MAX_LOAD) {
         resize_hashtable();
     }
     return true;
@@ -250,7 +268,7 @@ val_t map_search(t_key key) {
     MarkPtrType bucket_ptr = get_bucket(bucket);
     // ensure that bucket is initialized
     if (bucket_ptr == UNINITIALIZED) {
-        initialize_bucket(bucket);
+        bucket_ptr = initialize_bucket(bucket);
     }
     MarkPtrType result = list_search(bucket_ptr, so_regular_key(key));
     if (result && result->val) {
@@ -266,7 +284,7 @@ bool map_delete(t_key key) {
     MarkPtrType bucket_ptr = get_bucket(bucket);
     // ensure that bucket is initialized
     if (bucket_ptr == UNINITIALIZED) {
-        initialize_bucket(bucket);
+        bucket_ptr = initialize_bucket(bucket);
     }
     if (!list_delete(bucket_ptr, so_regular_key(key))) {
         return false;

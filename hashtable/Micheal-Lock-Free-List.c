@@ -18,6 +18,7 @@
 //******************************************************************************
 
 #include "Micheal-Lock-Free-List.h"
+#include "splay-tree/splay-uint64.h"
 
 
 
@@ -46,9 +47,56 @@ struct __hp_node {
 // local data
 //******************************************************************************
 
+// variables for hazard pointers
 hazard_ptr_node *hp_head;
 hazard_ptr_node *hp_tail;
 __thread hazard_ptr_node *local_hp_head;
+uint hazard_pointers_count = 0;
+
+
+// variables for SMR
+__thread NodeType *retired_list_head;
+__thread uint retired_node_count = 0;
+
+
+
+//******************************************************************************
+// hashtable definitions
+//******************************************************************************
+
+#define st_insert				\
+  typed_splay_insert(int)
+
+#define st_lookup				\
+  typed_splay_lookup(int)
+
+#define st_delete				\
+  typed_splay_delete(int)
+
+#define st_forall				\
+  typed_splay_forall(int)
+
+#define st_count				\
+  typed_splay_count(int)
+
+
+// we have a special case where we only need to search for keys,
+// we are not concerned with the value. Can we remove the value parameter from the struct?
+typedef struct typed_splay_node(int) {
+  struct typed_splay_node(int) *left;
+  struct typed_splay_node(int) *right;
+  uint64_t key;
+  int val;
+} typed_splay_node(int);
+
+
+typedef typed_splay_node(int) splay_t;
+
+
+splay_t *private_ht_root = 0;
+
+
+typed_splay_impl(int)
 
 
 
@@ -73,6 +121,7 @@ static uintptr_t get_mask_bit(MarkPtrType m_ptr) {
 
 
 static hazard_ptr_node* get_thread_hazard_pointers() {
+    // how will we recycle/clear pointers for finished threads?
     if (!local_hp_head) {
         hazard_ptr_node *hp = malloc(sizeof(hazard_ptr_node)*3);
         hp[0].next = &hp[1];
@@ -92,6 +141,7 @@ static hazard_ptr_node* get_thread_hazard_pointers() {
                     atomic_compare_exchange_strong(&hp_tail, &current_tail, &local_hp_head[2]);
                 }
             }
+            hazard_pointers_count = atomic_fetch_add(&hazard_pointers_count, 3);
         }
     }
     return local_hp_head;
@@ -169,21 +219,76 @@ static MarkPtrType list_find(NodeType *head, so_key_t so_key, MarkPtrType *out_p
 }
 
 
+splay_t* splay_node(uint64_t key) {
+  splay_t *node = (splay_t *) malloc(sizeof(splay_t));
+  //node->left = node->right = NULL;
+  node->key = key;
+  return node;
+}
+
+
+static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
+    // stage1: Scan hp_head list and insert all non-null nodes to private hashtable phtable
+    hazard_ptr_node *hp_ref = hp_head;
+    while (hp_ref) {
+        if (hp_ref->hp) {
+            st_insert(&private_ht_root, splay_node((uint64_t)hp_ref->hp));
+        }
+        hp_ref = hp_ref->next;
+    }
+
+    // stage2: check for all nodes in retired_list_head list to see if its present in phtable
+    // if no: node is safe for reclamation/reuse, else do nothing
+    NodeType *retired_list_ref = retired_list_head;
+    while (retired_list_ref) {
+        if (st_lookup(&private_ht_root, (uint64_t)retired_list_ref) == NULL) {
+            // node can be safely reclaimed
+
+            /* what do we do with nodes that are safe for reclamation? We can push such nodes to 
+            * another private list of free nodes. Each thread will first check if it has elements
+            * in its free-list before mallocing */
+        }
+        retired_list_ref = retired_list_ref->next;
+    }
+}
+
+
+static void global_scan_for_reclaimable_nodes() {
+    /* completed threads may leave behind hazard pointer nodes and elements in
+    * their retired_list_head. global_scan_for_reclaimable_nodes should identify such nodes and remove them.
+    * 
+    * Can we identify a thread is complete and its hazard pointer head, freelist and
+    * rlist can be reused */
+}
+
+
 
 //******************************************************************************
 // interface operations
 //******************************************************************************
 
+// retired nodes are nodes marked for deletion, but cant be freed/reused unless checked
 void retire_node(NodeType *node) {
     debug_print("retiring node: %u\n", node->key);
-    // rlist,rcount is a thread private list
-    // RETIRE_THRESHOLD = H + omega(H); where H is total no. of hazard pointers
-    /*rlist.push(node);
-    rcount++;
-    if (rcount >= RETIRE_THRESHOLD) {
-        Scan(array of hazard pointers);
+    /* In the paper, RETIRE_THRESHOLD = H + omega(H); where H is total no. of hazard pointers
+    * what is omega(H)? Shouldnt RETIRE_THRESHOLD < H and not >= H? 
+    * RETIRE_THRESHOLD should be small so that unneeded nodes are removed on regular basis
+    * large threshold values will cause problems in case of idle threads */
+    uint RETIRE_THRESHOLD = (hazard_pointers_count > 10) ? 10 : hazard_pointers_count;
+
+    // can we safely change the next pointer of node to null?
+    node->next = NULL;
+    
+    if (retired_list_head) {
+        retired_list_head->next = node;
+    } else {
+        retired_list_head = node;
     }
-    */
+    retired_node_count++;
+    if (retired_node_count >= RETIRE_THRESHOLD) {
+        local_scan_for_reclaimable_nodes(hp_head);
+        global_scan_for_reclaimable_nodes();
+    }
 }
 
 

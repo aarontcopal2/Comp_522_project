@@ -35,9 +35,11 @@
 #define MAX_LOAD 5              // is a 5 node bucket fine?
 #define SEGMENT_SIZE 5          // is SEGMENT_SIZE = 5 ok?
 
+
 #define DEBUG 0
 #define debug_print(fmt, ...) \
-    do { if (DEBUG) fprintf(stderr, fmt, __VA_ARGS__); } while (0)
+    do { if (DEBUG) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)
+
 
 
 //******************************************************************************
@@ -45,7 +47,7 @@
 //******************************************************************************
 
 /* shared variables */
-typedef MarkPtrType *segment_t; //segment_t is an array of MarkType pointers
+typedef MarkPtrType *segment_t; // segment_t is an array of MarkType pointers
 segment_t *ST;              // buckets (2D array of Marktype pointers)
 atomic_ullong count = 0;    // total nodes in hash table
 uint size = 2;              // hash table size
@@ -126,7 +128,7 @@ static uint get_parent(uint bucket) {
             return (bucket & ~(1 << i));
         }
     }
-    return 0;   //0(dummy) is the 1st node i.e parent of all nodes
+    return 0;   // 0(dummy) is the 1st node i.e parent of all nodes
 }
 
 
@@ -183,6 +185,7 @@ static uint64_t fetch_and_decrement_count() {
 
 
 static void resize_hashtable() {
+    debug_print("resize_hashtable()\n");
     uint csize = size;
     segment_t *old_ST = ST;
     segment_t *new_ST = malloc(sizeof(segment_t) * csize * 2);

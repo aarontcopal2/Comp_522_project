@@ -51,30 +51,25 @@ static void print_address(address *addr) {
 
 void *hashtable_operations(void *arg) {
     bool status;
-    t_key keys[5] = {0, 1, 2, 3, 4};
-    address addrs[5] = {{232, "Maroneal Street"}, {705, "LBS Road"}, {402, "Kensington SEZ"},
-                    {0, "MGLR"},{0, "JVLR"}};
+    address addrs[11] = {{232, "Maroneal Street"}, {705, "LBS Road"}, {402, "Kensington SEZ"},
+                    {0, "MGLR"},{0, "JVLR"}, {489, "E. Edgefield Street"}, {839, "NW. Mountainview St"},
+                    {298, "Cambridge Lane"}, {8166, "John Road"}, {88, "Brickyard Rd"},
+                    {180, "Pleasant Dr."}};
 
     uint t_index = pthread_self();
     int index = *(int*)arg;
     ANNOTATE_HAPPENS_BEFORE(arg);
     debug_print("thread: %u. index: %d\n", t_index, index);
     
-    t_key key = keys[index];
+    t_key key = index;
     val_t val = (void*)&addrs[index];
-    debug_print("\n***********map_insert***********\n");
     status = map_insert(key, val);
-    debug_print("***********status: %d***********\n", status);
 
-    debug_print("***********map_search***********\n");
-    address *result_val = (address*) map_search(key);
+    address *result_val = (address*) map_search(index);
     print_address(result_val);
 
-    debug_print("***********map_delete***********\n");
     status = map_delete(key);
-    debug_print("***********status: %d***********\n", status);
 
-    debug_print("***********map_search***********\n");
     result_val = (address*) map_search(key);
     print_address(result_val);
 }
@@ -89,8 +84,8 @@ int main () {
     initialize_hashtable();
 
     pthread_t thr;
-    int indices[5] = {0, 1, 2, 3, 4};
-    for (int i = 0; i < 2; i++) {
+    int indices[11] = {0, 1, 2, 3, 4, 5, 6, 7 ,8, 9, 10};
+    for (int i = 0; i < 11; i++) {
         pthread_create(&thr, NULL, hashtable_operations, &indices[i]);
         ANNOTATE_HAPPENS_BEFORE(indices[i]);
     }

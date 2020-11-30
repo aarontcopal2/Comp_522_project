@@ -83,8 +83,8 @@ static void clear_hazard_pointers() {
 }
 
 
-static MarkPtrType list_find(NodeType *head, so_key_t key, MarkPtrType *out_prev) {
-    debug_print("list_find: %u\n", key);
+static MarkPtrType list_find(NodeType *head, so_key_t so_key, MarkPtrType *out_prev) {
+    debug_print("list_find: %u\n", so_key);
     MarkPtrType prev, cur, next;
 
     try_again:
@@ -113,10 +113,10 @@ static MarkPtrType list_find(NodeType *head, so_key_t key, MarkPtrType *out_prev
                goto try_again;
             }
             if (!cmark) {
-                if (ckey >= key) {
+                if (ckey >= so_key) {
                     goto done;
                 }
-                prev = get_node(cur)->next;
+                prev = cur; // get_node(cur)->next; why does commented code work in paper and Kumpera?
                 set_hazard_pointer(cur, 2);
             } else {
                 MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
@@ -170,7 +170,7 @@ bool list_insert(MarkPtrType head, NodeType *node) {
 
     while (true) {
         cur = list_find(head, so_key, &prev);
-        if (cur) {
+        if (cur && cur->so_key == so_key) {
             result = false;
             break;
         }

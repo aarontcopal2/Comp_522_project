@@ -26,11 +26,30 @@
 //******************************************************************************
 
 // #define atomic_load(p)  ({ typeof(*p) __tmp = *(p); load_barrier (); __tmp; })
-typedef void* gpointer;
+
+
+typedef struct __hp_node hazard_ptr_node;
+
+struct __hp_node {
+    NodeType *hp;
+    hazard_ptr_node *next;
+};
+
 
 #define DEBUG 0
 #define debug_print(fmt, ...) \
-    do { if (DEBUG) fprintf(stderr, fmt, __VA_ARGS__); } while (0)
+    do { if (DEBUG) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)
+
+
+
+//******************************************************************************
+// local data
+//******************************************************************************
+
+hazard_ptr_node *hp_head;
+hazard_ptr_node *hp_tail;
+__thread hazard_ptr_node *local_hp_head;
+
 
 
 //******************************************************************************
@@ -53,33 +72,47 @@ static uintptr_t get_mask_bit(MarkPtrType m_ptr) {
 }
 
 
-static gpointer* get_thread_hazard_pointers() {
-    pthread_key_t hazard_pointers_key;
-    gpointer *hp = pthread_getspecific(hazard_pointers_key);
+static hazard_ptr_node* get_thread_hazard_pointers() {
+    if (!local_hp_head) {
+        hazard_ptr_node *hp = malloc(sizeof(hazard_ptr_node)*3);
+        hp[0].next = &hp[1];
+        hp[1].next = &hp[2];
+        hazard_ptr_node *null_hp = NULL;
 
-    if (!hp) {
-        hp = malloc(sizeof(gpointer)*3);
-        pthread_setspecific(hazard_pointers_key, hp);
+        if (!atomic_compare_exchange_strong(&local_hp_head, &null_hp, hp)) {
+            free(hp);
+        } else {
+            if (atomic_compare_exchange_strong(&hp_head, &null_hp, local_hp_head)) {
+                // do we need to check if this returns true?
+                atomic_compare_exchange_strong(&hp_tail, &null_hp, &local_hp_head[2]);
+            } else {
+                hazard_ptr_node *current_tail = hp_tail;
+                if(atomic_compare_exchange_strong(&(hp_tail->next), &null_hp, local_hp_head)) {
+                    // do we need to check if this returns true?
+                    atomic_compare_exchange_strong(&hp_tail, &current_tail, &local_hp_head[2]);
+                }
+            }
+        }
     }
-    return hp;
+    return local_hp_head;
 }
 
 
 static NodeType* get_hazard_pointer(int index) {
-    return (NodeType*)get_thread_hazard_pointers()[index];
+    return get_thread_hazard_pointers()[index].hp;
 }
 
 
-static gpointer set_hazard_pointer(NodeType* node, int index) {
-    get_thread_hazard_pointers()[index] = node;
+static void set_hazard_pointer(NodeType* node, int index) {
+    get_thread_hazard_pointers()[index].hp = node;
 }
 
 
 static void clear_hazard_pointers() {
-    gpointer *hp = get_thread_hazard_pointers();
-    hp[0] = NULL;
-    hp[1] = NULL;
-    hp[2] = NULL;
+    hazard_ptr_node *hp = get_thread_hazard_pointers();
+    hp[0].hp = NULL;
+    hp[1].hp = NULL;
+    hp[2].hp = NULL;
 }
 
 
@@ -104,8 +137,8 @@ static MarkPtrType list_find(NodeType *head, so_key_t so_key, MarkPtrType *out_p
             // ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(cur);
             ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(get_node(cur));
             so_key_t ckey = cur->so_key;
-            /* commented because cant see in kumpera implementation
             set_hazard_pointer(next, 0);
+            /* commented because cant see in kumpera implementation
             if (atomic_load(&cur) != create_mark_pointer(get_node(next), cmark)) {
                 goto try_again;
             }*/

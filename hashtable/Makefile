@@ -7,8 +7,9 @@ CXX_VERSION=
 LIBS=-latomic -lpthread
 MKDIR_P = mkdir -p
 
-all: Micheal-Lock-Free-List.c Split-Ordered-Lists.c
+all: Micheal-Lock-Free-List.c Split-Ordered-Lists.c splay-tree/splay-uint64.c
 	$(MKDIR_P) build
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/splay-uint64.o splay-tree/splay-uint64.c -c
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/Micheal-Lock-Free-List.o Micheal-Lock-Free-List.c -c
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/Split-Ordered-Lists.o Split-Ordered-Lists.c -c
 	

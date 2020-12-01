@@ -9,7 +9,7 @@
 
 #include <pthread.h>    // pthread_create
 #include <stdlib.h>
-
+#include <unistd.h>     // write
 
 
 //******************************************************************************
@@ -45,8 +45,12 @@ static void print_address(address *addr) {
         printf("address passed is NULL\n");
         return;
     }
-    printf("address: {\n\tapartment_no: %d,\n\tstreet_name: %s\n}\n", 
+    /* We use sprintf + write instead of printf. Helgrind reports data-races for the latter */
+    char buffer[75];
+    int stdout = 1;
+    int char_count = sprintf(buffer, "address: {\n\tapartment_no: %d,\n\tstreet_name: %s\n}\n", 
         addr->apartment_no, addr->street_name);
+    write(stdout, buffer, char_count);
 }
 
 

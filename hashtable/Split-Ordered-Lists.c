@@ -195,7 +195,8 @@ static void resize_hashtable() {
     segment_t *new_ST = malloc(sizeof(segment_t) * csize * 2);
     /* will this operation need to be done using a lock?
     * Else we may loose some insertions happening between memcpy and changing swapping of old table with new
-    * Fix1: use hazard pointers for ST. One pointer per thread */
+    * Fix1: use hazard pointers for ST. 1st entry in hp_head will be for table. entry will be non-null
+    * during call to resize. No insert, search, delete operations can happen while entry is non-null */
     memcpy(new_ST, ST, sizeof(segment_t) * csize);
 
     if (!atomic_compare_exchange_strong(&size, &csize, 2*csize)) {

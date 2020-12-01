@@ -172,6 +172,17 @@ static void set_hazard_pointer(NodeType* node, int index) {
 }
 
 
+static void initialize_hazard_pointers() {
+    /*  This function is just to fix helgrind data-race errors
+    * get_thread_hazard_pointers allocates memory for thread local hazard pointers
+    * list_find is usually responsible for calling the same. But it may be possbile that list_find exits
+    * before this call. Helgrind is reporting that there are conflcting calls for initialization from list_insert
+    * list_delete and list_search. These reports are incorrect since thread local hazard pointer cant be accessed 
+    * by concurrent threads. */
+    get_thread_hazard_pointers();
+}
+
+
 static void clear_hazard_pointers() {
     hazard_ptr_node *hp = get_thread_hazard_pointers();
     hp[0].hp = NULL;
@@ -183,6 +194,7 @@ static void clear_hazard_pointers() {
 static MarkPtrType list_find(NodeType *head, so_key_t so_key, MarkPtrType *out_prev) {
     debug_print("list_find: %u\n", so_key);
     MarkPtrType prev, cur, next;
+    initialize_hazard_pointers();
 
     try_again:
         prev = head;
@@ -268,7 +280,7 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
 
 
 static void global_scan_for_reclaimable_nodes() {
-    /* completed threads may leave behind hazard pointer nodes and elements in
+    /* completed/idle threads may leave behind hazard pointer nodes and elements in
     * their retired_list_head. global_scan_for_reclaimable_nodes should identify such nodes and remove them.
     * 
     * Can we identify a thread is complete and its hazard pointer head, freelist and

@@ -158,12 +158,17 @@ static NodeType* get_hazard_pointer(int index) {
 
 static void set_hazard_pointer(NodeType* node, int index) {
     hazard_ptr_node *hpn = get_thread_hazard_pointers();
-    NodeType *null_hp = NULL;
 
     /* setting hp to null because hpn is thread local.
     * Other threads dont depend on this hazard pointer */
+
+    /*
+    NodeType *null_hp = NULL;
     hpn[index].hp = null_hp;
     atomic_compare_exchange_strong(&hpn[index].hp, &null_hp, node);
+    */
+    // no need for atomic CAS for thread local changes
+    hpn[index].hp = node;
 }
 
 

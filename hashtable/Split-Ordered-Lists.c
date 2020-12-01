@@ -95,6 +95,7 @@ static MarkPtrType get_bucket(uint bucket) {
     if (ST[segment] == NULL) {
         return UNINITIALIZED;
     }
+    ANNOTATE_HAPPENS_AFTER(ST);     // get_bucket is always called after set_bucket
     return ST[segment][bucket % SEGMENT_SIZE];
 }
 
@@ -115,6 +116,7 @@ static void set_bucket(uint bucket, NodeType *head) {
         }
     }
     free(null_segment);
+    ANNOTATE_HAPPENS_BEFORE(ST);
     ST[segment][bucket % SEGMENT_SIZE] = head;
 }
 

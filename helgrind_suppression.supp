@@ -1,0 +1,12 @@
+{
+   printf_suppression
+   Helgrind:Race
+   fun:mempcpy
+   fun:_IO_file_xsputn@@GLIBC_2.2.5
+   fun:puts
+   fun:print_address
+   fun:hashtable_operations
+   fun:mythread_wrapper
+   fun:start_thread
+   fun:clone
+}

@@ -6,7 +6,7 @@ OPT=-g
 CXX_VERSION=
 LIBS=-latomic -lpthread
 BUILD_DIR=hashtable/build
-HELGRIND_PARAMS=--free-is-write=yes --history-level=full --show-error-list=yes
+HELGRIND_PARAMS=--free-is-write=yes --history-level=full --show-error-list=yes --suppressions=$(shell pwd)/helgrind_suppression.supp
 
 all:
 	$(MAKE) -C "hashtable" all

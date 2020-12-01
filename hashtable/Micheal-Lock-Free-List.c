@@ -93,7 +93,7 @@ typedef struct typed_splay_node(int) {
 typedef typed_splay_node(int) splay_t;
 
 
-splay_t *private_ht_root = 0;
+__thread splay_t *private_ht_root = 0;
 
 
 typed_splay_impl(int)
@@ -121,9 +121,11 @@ static uintptr_t get_mask_bit(MarkPtrType m_ptr) {
 
 
 static hazard_ptr_node* get_thread_hazard_pointers() {
-    // how will we recycle/clear pointers for finished threads?
     if (!local_hp_head) {
-        hazard_ptr_node *hp = malloc(sizeof(hazard_ptr_node)*3);
+        /* how will we recycle/clear pointers for finished threads? 
+        * if that is possible, we need not always malloc */
+        hazard_ptr_node *hp = malloc(sizeof(hazard_ptr_node) * 3);
+        ANNOTATE_HAPPENS_BEFORE(hp);
         hp[0].next = &hp[1];
         hp[1].next = &hp[2];
         hazard_ptr_node *null_hp = NULL;
@@ -137,11 +139,12 @@ static hazard_ptr_node* get_thread_hazard_pointers() {
             } else {
                 hazard_ptr_node *current_tail = hp_tail;
                 if(atomic_compare_exchange_strong(&(hp_tail->next), &null_hp, local_hp_head)) {
+                    ANNOTATE_HAPPENS_AFTER(local_hp_head);
                     // do we need to check if this returns true?
                     atomic_compare_exchange_strong(&hp_tail, &current_tail, &local_hp_head[2]);
                 }
             }
-            hazard_pointers_count = atomic_fetch_add(&hazard_pointers_count, 3);
+            atomic_fetch_add(&hazard_pointers_count, 3);
         }
     }
     return local_hp_head;
@@ -154,7 +157,13 @@ static NodeType* get_hazard_pointer(int index) {
 
 
 static void set_hazard_pointer(NodeType* node, int index) {
-    get_thread_hazard_pointers()[index].hp = node;
+    hazard_ptr_node *hpn = get_thread_hazard_pointers();
+    NodeType *null_hp = NULL;
+
+    /* setting hp to null because hpn is thread local.
+    * Other threads dont depend on this hazard pointer */
+    hpn[index].hp = null_hp;
+    atomic_compare_exchange_strong(&hpn[index].hp, &null_hp, node);
 }
 
 
@@ -278,7 +287,7 @@ void retire_node(NodeType *node) {
 
     // can we safely change the next pointer of node to null?
     node->next = NULL;
-    
+
     if (retired_list_head) {
         retired_list_head->next = node;
     } else {

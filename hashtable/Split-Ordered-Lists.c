@@ -117,7 +117,9 @@ static void set_bucket(uint bucket, NodeType *head) {
     }
     free(null_segment);
     ANNOTATE_HAPPENS_BEFORE(ST);
-    ST[segment][bucket % SEGMENT_SIZE] = head;
+    MarkPtrType null_mptr = NULL;
+    atomic_compare_exchange_strong(&ST[segment][bucket % SEGMENT_SIZE], &null_mptr, head);
+    // ST[segment][bucket % SEGMENT_SIZE] = head;
 }
 
 

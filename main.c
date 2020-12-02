@@ -8,7 +8,6 @@
 //******************************************************************************
 
 #include <pthread.h>    // pthread_create
-#include <stdlib.h>
 #include <unistd.h>     // write
 
 
@@ -33,6 +32,9 @@ typedef struct {
 #define DEBUG 0
 #define debug_print(fmt, ...) \
     do { if (DEBUG) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)
+
+
+hashtable *htab;
 
 
 
@@ -68,14 +70,14 @@ void *hashtable_operations(void *arg) {
     
     t_key key = index;
     val_t val = (void*)&addrs[index];
-    status = map_insert(key, val);
+    status = map_insert(htab, key, val);
 
-    address *result_val = (address*) map_search(index);
+    address *result_val = (address*) map_search(htab, index);
     print_address(result_val);
 
-    status = map_delete(key);
+    status = map_delete(htab, key);
 
-    result_val = (address*) map_search(key);
+    result_val = (address*) map_search(htab, key);
     print_address(result_val);
 }
 
@@ -86,7 +88,7 @@ void *hashtable_operations(void *arg) {
 //******************************************************************************
 
 int main () {
-    initialize_hashtable();
+    htab = hashtable_initialize();
 
     pthread_t thr;
     int indices[11] = {0, 1, 2, 3, 4, 5, 6, 7 ,8, 9, 10};
@@ -95,4 +97,5 @@ int main () {
         ANNOTATE_HAPPENS_BEFORE(indices[i]);
     }
     pthread_join(thr, NULL);
+    hashtable_destroy(htab);
 }

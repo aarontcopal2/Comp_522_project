@@ -14,8 +14,8 @@
 //******************************************************************************
 
 #include <stdlib.h>     // NULL
-#include <stdatomic.h>  // atomic_fetch_add
 #include <string.h>     // memcpy
+#include <assert.h>     // assert
 
 
 
@@ -31,26 +31,42 @@
 // macros
 //******************************************************************************
 
-#define UNINITIALIZED NULL
-#define MAX_LOAD 5              // is a 5 node bucket fine?
+#define INITIAL_SEGMENTS 2
 #define SEGMENT_SIZE 5          // is SEGMENT_SIZE = 5 ok?
+#define MAX_LOAD 5              // is an average load of (5 nodes/bucket) fine?
+
+
+#define NON_BLOCKING 0
+#define BLOCKING 1
+
+
+#define NO_RESIZING 0u
+#define ALLOCATING_MEMORY 1u
+#define MOVING_DATA 3u
+#define CLEANING 2u
+
+
+#define STATE_BITS 2u
+#define STATE_INCREMENT (1u << STATE_BITS)
+#define STATE_MASK (STATE_INCREMENT - 1)
+#define GET_STATE(r) ((r) & STATE_MASK)
+#define GET_ACTIVE_REPLICAS(r) (r >> STATE_BITS)
+#define IS_NO_RESIZE_OR_CLEANING(r) (((r) & 0x1u) == 0)
+
+
+/* each thread will take up initialization work of 64 segments at a time
+* each segment has 5 buckets inside it.
+So, a block will contain 64 * 5 = 320 memory locations */
+#define BLOCK_SIZE 64
+#define MAX(a, b) \
+    ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+        (_a >= _b) ? a : b; })
 
 
 #define DEBUG 0
 #define debug_print(fmt, ...) \
     do { if (DEBUG) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)
-
-
-
-//******************************************************************************
-// local data
-//******************************************************************************
-
-/* shared variables */
-typedef MarkPtrType *segment_t; // segment_t is an array of MarkType pointers
-segment_t *ST;              // buckets (2D array of Marktype pointers)
-atomic_ullong count = 0;    // total nodes in hash table
-uint size = 2;              // hash table size
 
 
 
@@ -87,28 +103,28 @@ static bool is_dummy_node(so_key_t key) {
 }
 
 
-static MarkPtrType get_bucket(uint bucket) {
+static MarkPtrType get_bucket(hashtable *htab, uint bucket) {
     debug_print("get_bucket: %u\n", bucket);
     uint segment = bucket / SEGMENT_SIZE;
 
     // bucket not initialized, hence segment is NULL
-    if (ST[segment] == NULL) {
-        return UNINITIALIZED;
+    if (htab->ST[segment] == NULL) {
+        return NULL;
     }
-    ANNOTATE_HAPPENS_AFTER(ST);     // get_bucket is always called after set_bucket
-    return ST[segment][bucket % SEGMENT_SIZE];
+    ANNOTATE_HAPPENS_AFTER(htab->ST);     // get_bucket is always called after set_bucket
+    return htab->ST[segment][bucket % SEGMENT_SIZE];
 }
 
 
-static void set_bucket(uint bucket, NodeType *head) {
+static void set_bucket(hashtable *htab, uint bucket, NodeType *head) {
     debug_print("set_bucket: %u\n", bucket);
     uint segment = bucket / SEGMENT_SIZE;
     MarkPtrType *null_segment = (MarkPtrType*)calloc(sizeof(MarkPtrType)*SEGMENT_SIZE, 0);
     // we may need to set new_segment[i-SEGMENT_SIZE] = NULL
-    if (ST[segment] == NULL) {
+    if (htab->ST[segment] == NULL) {
         MarkPtrType *new_segment = (MarkPtrType*)calloc(sizeof(MarkPtrType)*SEGMENT_SIZE, 0);
         
-        if(!atomic_compare_exchange_strong(&ST[segment], null_segment, new_segment)) {
+        if(!atomic_compare_exchange_strong(&htab->ST[segment], null_segment, new_segment)) {
             // some other thread beat us to updating the segment
             free(new_segment);
             free(null_segment);
@@ -116,9 +132,9 @@ static void set_bucket(uint bucket, NodeType *head) {
         }
     }
     free(null_segment);
-    ANNOTATE_HAPPENS_BEFORE(ST);
+    ANNOTATE_HAPPENS_BEFORE(htab->ST);
     MarkPtrType null_mptr = NULL;
-    atomic_compare_exchange_strong(&ST[segment][bucket % SEGMENT_SIZE], &null_mptr, head);
+    atomic_compare_exchange_strong(&htab->ST[segment][bucket % SEGMENT_SIZE], &null_mptr, head);
     // ST[segment][bucket % SEGMENT_SIZE] = head;
 }
 
@@ -136,14 +152,14 @@ static uint get_parent(uint bucket) {
 }
 
 
-static MarkPtrType initialize_bucket(uint bucket) {
+static MarkPtrType initialize_bucket(hashtable *htab, uint bucket) {
     debug_print("initialize_bucket: %u\n", bucket);
 
     MarkPtrType cur;
     uint parent = get_parent(bucket);
-    MarkPtrType parent_bucket_ptr = get_bucket(parent);
-    if (parent_bucket_ptr == UNINITIALIZED) {
-        parent_bucket_ptr = initialize_bucket(parent);
+    MarkPtrType parent_bucket_ptr = get_bucket(htab, parent);
+    if (parent_bucket_ptr == NULL) {
+        parent_bucket_ptr = initialize_bucket(htab, parent);
     }
 
     NodeType *dummy = malloc(sizeof(NodeType));
@@ -169,45 +185,178 @@ static MarkPtrType initialize_bucket(uint bucket) {
         cur = list_search(parent_bucket_ptr, so_dummy_key(dummy->key));
         dummy = cur;
     }
-    set_bucket(bucket, dummy);
+    set_bucket(htab, bucket, dummy);
     /* we call get_bucket again rather than returning from set_bucket because some other thread may have called set_bucket and updated
     * the bucket pointer. get_bucket is safer.
     * TO-DO: I think the if(!list_insert()) loop will get the right dummy node and we can return dummy without calling get_bucket().*/
 
-    return get_bucket(bucket);
+    return get_bucket(htab, bucket);
 }
 
 
-static uint64_t fetch_and_increment_count() {
-    return atomic_fetch_add(&count, 1);
+static uint64_t fetch_and_increment_count(hashtable *htab) {
+    return atomic_fetch_add(&htab->count, 1);
 }
 
 
-static uint64_t fetch_and_decrement_count() {
-    return atomic_fetch_add(&count, -1);
+static uint64_t fetch_and_decrement_count(hashtable *htab) {
+    return atomic_fetch_add(&htab->count, -1);
 }
 
 
-static void resize_hashtable() {
-    debug_print("resize_hashtable()\n");
-    uint csize = size;
-    segment_t *old_ST = ST;
-    segment_t *new_ST = malloc(sizeof(segment_t) * csize * 2);
-    /* will this operation need to be done using a lock?
-    * Else we may loose some insertions happening between memcpy and changing swapping of old table with new
-    * Fix1: use hazard pointers for ST. 1st entry in hp_head will be for table. entry will be non-null
-    * during call to resize. No insert, search, delete operations can happen while entry is non-null */
-    memcpy(new_ST, ST, sizeof(segment_t) * csize);
+static void resize_task(hashtable *htab, int blocking) {
+    // data structure is divided into blocks, keep picking block that next needs to be worked upon
+    size_t num_old_blocks = MAX(htab->old_size / BLOCK_SIZE, 1);
+    size_t num_new_blocks = MAX(htab->size / BLOCK_SIZE, 1);
+    size_t my_block;
+    size_t num_finished_blocks = 0;
 
-    if (!atomic_compare_exchange_strong(&size, &csize, 2*csize)) {
-        // a concurrent thread already incremented the size
-        free(new_ST);
+    // initialize blocks
+    while ((my_block = atomic_fetch_add(&htab->next_init_block, 1)) < num_new_blocks) {
+        size_t block_start = my_block * BLOCK_SIZE;
+        size_t block_end = (my_block + 1) * BLOCK_SIZE;
+        if (block_end > htab->size) {
+            block_end = htab->size;
+        }
+
+        for (int i = block_start; i < block_end; i++) {
+            for (int j = 0; j < SEGMENT_SIZE; j++) {
+                atomic_init(&htab->ST[i][j], NULL);
+            }
+        }
+        num_finished_blocks++;
+    }
+
+    // wait for all blocks to be initialized
+    atomic_fetch_add(&htab->num_initialized_blocks, num_finished_blocks);
+    // is there a need for this loop? maybe yes, if some other thread takes up the last block
+    while (atomic_load(&htab->num_initialized_blocks) != num_new_blocks);
+
+    // move old block contents to new block
+    num_finished_blocks = 0;
+    while ((my_block = atomic_fetch_add(&htab->next_move_block, 1)) < num_old_blocks) {
+        size_t block_start = my_block * BLOCK_SIZE;
+        size_t block_end = (my_block + 1) * BLOCK_SIZE;
+        if (block_end > htab->old_size) {
+            block_end = htab->old_size;
+        }
+
+        for (int i = block_start; i < block_end; i++) {
+            for (int j = 0; j < SEGMENT_SIZE; j++) {
+                atomic_store(&htab->ST[i][j], 
+                    atomic_load(&htab->old_ST[i][j]));
+            }
+        }
+        num_finished_blocks++;
+    }
+
+    atomic_fetch_add(&htab->num_moved_blocks, num_finished_blocks);
+
+    if (blocking) {
+        while (atomic_load(&htab->num_moved_blocks) != num_old_blocks);
+    }
+}
+
+
+static void resize_replica(hashtable *htab) {
+    // get resize state for hashtable
+    size_t resize_state = atomic_load(&htab->resizing_state); 
+
+    // if state = (cleaning | no_resizing), resize has finished
+    if (IS_NO_RESIZE_OR_CLEANING(resize_state)) {
         return;
     }
 
-    if (!atomic_compare_exchange_strong(&ST, old_ST, new_ST)) {
-        // a concurrent thread already switched the table pointer
-        free(new_ST);
+    // register as replica and check again if resize has finished
+    resize_state = atomic_fetch_add(&htab->resizing_state, STATE_INCREMENT);
+    if (IS_NO_RESIZE_OR_CLEANING(resize_state)) {
+        atomic_fetch_sub(&htab->resizing_state, STATE_INCREMENT);
+        return;
+    }
+
+    // wait for new table allocation to complete
+    while (GET_STATE(resize_state) == ALLOCATING_MEMORY) {
+        resize_state = atomic_load(&htab->resizing_state);
+    }
+
+    // check if resize is done
+    assert(GET_STATE(resize_state) != NO_RESIZING);
+    if (GET_STATE(resize_state == CLEANING)) {
+        atomic_fetch_sub(&htab->resizing_state, STATE_INCREMENT);
+        return;
+    }
+
+    // resize_task with blocking=0
+    resize_task(htab, NON_BLOCKING);
+
+    // deregister replica
+    atomic_fetch_sub(&htab->resizing_state, STATE_INCREMENT);
+}
+
+
+static void resize_primary(hashtable *htab) {
+    // initialize values
+    htab->old_size = htab->size;
+    htab->old_ST = htab->ST;
+    htab->size = htab->size * 2;
+
+    // malloc new table
+    htab->ST = malloc(sizeof(segment_t) * htab->size);
+    assert(htab->ST);
+
+    // change state from allocation to moving data
+    size_t resize_state = atomic_fetch_xor(&htab->resizing_state, ALLOCATING_MEMORY ^ MOVING_DATA);       // what was the purpose of XOR? Could we simply store 3?
+
+    // resize_task with blocking=1
+    resize_task(htab, BLOCKING);
+
+    // change state from moving data to cleaning
+    resize_state = atomic_fetch_xor(&htab->resizing_state, MOVING_DATA ^ CLEANING);
+
+    // wait for active replica threads to be zero
+    while (GET_ACTIVE_REPLICAS(resize_state) != 0) {
+        resize_state = atomic_load(&htab->resizing_state);
+    }
+
+    // no more active replicas
+    // reinitialize values for future resize
+    atomic_store(&htab->next_init_block, 0);
+    atomic_store(&htab->num_initialized_blocks, 0);
+    atomic_store(&htab->next_move_block, 0);
+    atomic_store(&htab->num_moved_blocks, 0);
+
+    // freeing old table
+    free(htab->old_ST);
+
+    // change state from cleaning to no_resizing
+    resize_state = atomic_fetch_xor(&htab->resizing_state, CLEANING ^ NO_RESIZING);
+}
+
+
+static void resize_hashtable(hashtable *htab) {
+    debug_print("resize_hashtable()\n");
+
+    /* resizing requires mallocing a new memory region and copying old values to this new region and swapping the data structure pointers
+    * This operation needs to be atomic, else we may loose some insertions happening between memcpy and swapping of old table with new
+    * there will be 3 helper functions for atomic resizing: resize_primary, resize_replica, resize_task
+    * resize_primary: first thread that calls resize will invoke be the master thread for resizing and invoke this function
+    * resize_replica: during resize, insert-search-delete should be paused. Any thread trying to do such operations(or invoking resize a 2nd time) while a resize is
+    * ongoing is marked as a resize_replica. Such threads will invoke resize_replica()
+    * actual resizing work happens in the resize_task function */
+
+   size_t resizing_state = atomic_load(&htab->resizing_state);
+    if (resizing_state == 0 &&
+        atomic_compare_exchange_strong(&htab->resizing_state, &resizing_state, ALLOCATING_MEMORY)) {
+        // Primary thread
+        pthread_rwlock_unlock(&htab->resize_rwl);
+
+        pthread_rwlock_wrlock(&htab->resize_rwl);
+        resize_primary(htab);
+        pthread_rwlock_unlock(&htab->resize_rwl);
+    } else {
+        // Replica(Secondary) thread
+        pthread_rwlock_unlock(&htab->resize_rwl);
+        resize_replica(htab);
     }
 }
 
@@ -217,12 +366,25 @@ static void resize_hashtable() {
 // interface operations
 //******************************************************************************
 
-void initialize_hashtable () {
-    ST = malloc(sizeof(segment_t) * size);
+hashtable* hashtable_initialize () {
+    hashtable *htab = malloc(sizeof(hashtable));
+    htab->count = 0;
+    htab->size = INITIAL_SEGMENTS;
+    htab->old_size = 0;
+    htab->old_ST = NULL;
+    htab->next_init_block = 0;
+    htab->next_move_block = 0;
+    htab->num_initialized_blocks = 0;
+    htab->num_moved_blocks = 0;
+    htab->resizing_state = 0;
+    pthread_rwlock_init(&htab->resize_rwl, NULL);
+
+    segment_t *ST = malloc(sizeof(segment_t) * htab->size);
     ST[0] = (MarkPtrType*)malloc(SEGMENT_SIZE * sizeof(MarkPtrType*));
     for (int i = 0; i < SEGMENT_SIZE; i++) {
         ST[0][i] = NULL;
     }
+    htab->ST = ST;
     // adding a dummy node for key = 0. Without this node, intialize bucket calls to bucket=0 will be stuck in an infinite loop
     t_key start_key = 0;
     NodeType *start_node = malloc(sizeof(NodeType));
@@ -230,18 +392,27 @@ void initialize_hashtable () {
     start_node->key = start_key;
     start_node->isDummy = true;
     start_node->next = NULL;
-    set_bucket(start_key, start_node);
+    set_bucket(htab, start_key, start_node);
+
+    return htab;
 }
 
 
-bool map_insert(t_key key, val_t val) {
+void hashtable_destroy(hashtable *htab) {
+    free(htab->ST);
+    pthread_rwlock_destroy(&htab->resize_rwl);
+    // free hazard pointers and related data-structures
+}
+
+
+bool map_insert(hashtable *htab, t_key key, val_t val) {
     debug_print("map_insert: %u\n", key);
-    uint bucket = key % size;
+    uint bucket = key % htab->size;
 
     // intialize bucket if not already done
-    MarkPtrType bucket_ptr = get_bucket(bucket);
+    MarkPtrType bucket_ptr = get_bucket(htab, bucket);
     if (!bucket_ptr) {
-        bucket_ptr = initialize_bucket(bucket);
+        bucket_ptr = initialize_bucket(htab, bucket);
     }
 
     // inside the node, key is stored in split-ordered form
@@ -262,21 +433,21 @@ bool map_insert(t_key key, val_t val) {
 
     // if insertion is succesful, increment the count of nodes.
     // If the load factor of the hashtable > MAX_LOAD, resize the hash table
-    if (fetch_and_increment_count(&count) / (size * SEGMENT_SIZE) > MAX_LOAD) {
-        resize_hashtable();
+    if (fetch_and_increment_count(htab) / (htab->size * SEGMENT_SIZE) > MAX_LOAD) {
+        resize_hashtable(htab);
     }
     return true;
 }
 
 
 // need to return value
-val_t map_search(t_key key) {
-    uint bucket = key % size;
+val_t map_search(hashtable *htab, t_key key) {
+    uint bucket = key % htab->size;
 
-    MarkPtrType bucket_ptr = get_bucket(bucket);
+    MarkPtrType bucket_ptr = get_bucket(htab, bucket);
     // ensure that bucket is initialized
-    if (bucket_ptr == UNINITIALIZED) {
-        bucket_ptr = initialize_bucket(bucket);
+    if (bucket_ptr == NULL) {
+        bucket_ptr = initialize_bucket(htab, bucket);
     }
     MarkPtrType result = list_search(bucket_ptr, so_regular_key(key));
     if (result && result->val) {
@@ -286,19 +457,19 @@ val_t map_search(t_key key) {
 }
 
 
-bool map_delete(t_key key) {
-    uint bucket = key % size;
+bool map_delete(hashtable *htab, t_key key) {
+    uint bucket = key % htab->size;
 
-    MarkPtrType bucket_ptr = get_bucket(bucket);
+    MarkPtrType bucket_ptr = get_bucket(htab, bucket);
     // ensure that bucket is initialized
-    if (bucket_ptr == UNINITIALIZED) {
-        bucket_ptr = initialize_bucket(bucket);
+    if (bucket_ptr == NULL) {
+        bucket_ptr = initialize_bucket(htab, bucket);
     }
     if (!list_delete(bucket_ptr, so_regular_key(key))) {
         return false;
     }
 
     // if deletion is succesful, decrement the count of nodes.
-    fetch_and_decrement_count(&count);
+    fetch_and_decrement_count(htab);
     return true;
 }

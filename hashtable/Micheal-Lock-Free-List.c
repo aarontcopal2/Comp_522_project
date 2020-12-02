@@ -9,7 +9,6 @@
 
 #include <stdlib.h>     // NULL
 #include <stdatomic.h>  // atomic_fetch_add
-#include <pthread.h>    // pthread_setspecific, pthread_key_t
 
 
 
@@ -19,6 +18,16 @@
 
 #include "Micheal-Lock-Free-List.h"
 #include "splay-tree/splay-uint64.h"
+
+
+
+//******************************************************************************
+// macros
+//******************************************************************************
+
+#define DEBUG 0
+#define debug_print(fmt, ...) \
+    do { if (DEBUG) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)
 
 
 
@@ -35,11 +44,6 @@ struct __hp_node {
     NodeType *hp;
     hazard_ptr_node *next;
 };
-
-
-#define DEBUG 0
-#define debug_print(fmt, ...) \
-    do { if (DEBUG) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)
 
 
 
@@ -124,8 +128,9 @@ static hazard_ptr_node* get_thread_hazard_pointers() {
     if (!local_hp_head) {
         /* how will we recycle/clear pointers for finished threads? 
         * if that is possible, we need not always malloc */
-        hazard_ptr_node *hp = malloc(sizeof(hazard_ptr_node) * 3);
+        hazard_ptr_node *hp;
         ANNOTATE_HAPPENS_BEFORE(hp);
+        hp = malloc(sizeof(hazard_ptr_node) * 3);
         hp[0].next = &hp[1];
         hp[1].next = &hp[2];
         hazard_ptr_node *null_hp = NULL;
@@ -139,10 +144,10 @@ static hazard_ptr_node* get_thread_hazard_pointers() {
             } else {
                 hazard_ptr_node *current_tail = hp_tail;
                 if(atomic_compare_exchange_strong(&(hp_tail->next), &null_hp, local_hp_head)) {
-                    ANNOTATE_HAPPENS_AFTER(local_hp_head);
                     // do we need to check if this returns true?
                     atomic_compare_exchange_strong(&hp_tail, &current_tail, &local_hp_head[2]);
                 }
+                ANNOTATE_HAPPENS_AFTER(local_hp_head);
             }
             atomic_fetch_add(&hazard_pointers_count, 3);
         }

@@ -247,8 +247,15 @@ static MarkPtrType list_find(NodeType *head, so_key_t so_key, MarkPtrType *out_p
     done:
         *out_prev = prev;
         MarkPtrType result = cur;
-        if (is_node_deleted(cur) || get_node(cur) == NULL) {
-            result = NULL;
+
+        // checking to see if the node that we have fetched is deleted
+        // cur->next will contain pointer to next node. Its last bit will denote if cur is marked for deletion.
+        MarkPtrType cur_next_ptr;
+        if (cur && (cur_next_ptr = atomic_load(&cur->next))) { // || get_node(cur) == NULL
+            bool isDeleted = is_node_deleted(cur_next_ptr);
+            if (isDeleted) {
+                result = NULL;
+            }
         }
         return result;
 }
@@ -377,11 +384,22 @@ bool list_delete(MarkPtrType head, so_key_t key) {
             break;
         }
         next = get_hazard_pointer(0);
+
+        /* cur->next will contain pointer to next node. Its last bit will denote if cur is marked for deletion.
+        * bit=0/1 -> not-deleted/deleted */
+
+        // expected: cur points to next and cur is not marked for deletion
         MarkPtrType expected = create_mark_pointer(next, 0);
+
+        // if expected matches, set cur marked for deletion
         if (!atomic_compare_exchange_strong(&(cur->next), &expected, create_mark_pointer(next, 1))) {
             continue;
         }
+
+        // expected: prev points to cur and prev is not marked for deletion
         expected = create_mark_pointer(cur, 0);
+
+        // if expected matches, make prev point to next
         if (atomic_compare_exchange_strong(&(prev->next), &expected, create_mark_pointer(next, 0))) {
             retire_node(cur);
         } else {

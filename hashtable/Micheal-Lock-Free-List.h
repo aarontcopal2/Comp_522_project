@@ -13,30 +13,18 @@
 
 
 //******************************************************************************
-// type definitions
+// local includes
 //******************************************************************************
 
-typedef unsigned int uint;
-typedef uint so_key_t;
-typedef uint t_key;
-typedef void* val_t;
+#include "Micheal-Lock-Free-List.h"
+#include "splay-tree/splay-uint64.h"
+#include "channel/hashtable-memory-manager.h"
 
 
-typedef struct __node NodeType;
 
-
-//what is a markable pointer type
-typedef NodeType* MarkPtrType;
-
-
-//Node: contains key and next pointer
-struct __node {
-    so_key_t so_key;
-    t_key key;
-    val_t val;
-    bool isDummy;
-    _Atomic(MarkPtrType) next;
-};
+//******************************************************************************
+// type definitions
+//******************************************************************************
 
 
 
@@ -46,12 +34,14 @@ struct __node {
 
 void retire_node
 (
+    hashtable *htab,
     NodeType *node
 );
 
 
 MarkPtrType list_search
 (
+    hashtable *htab,
     MarkPtrType head,
     so_key_t key
 );
@@ -59,6 +49,7 @@ MarkPtrType list_search
 
 bool list_insert
 (
+    hashtable *htab,
     MarkPtrType head,
     NodeType *node
 );
@@ -66,6 +57,7 @@ bool list_insert
 
 bool list_delete
 (
+    hashtable *htab,
     MarkPtrType head,
     so_key_t key
 );

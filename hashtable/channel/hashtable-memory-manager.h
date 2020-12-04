@@ -52,7 +52,7 @@
 
 #include "lib/prof-lean/bistack.h"
 #include "hpcrun/gpu/gpu-activity.h"
-#include "../Micheal-Lock-Free-List.h"
+//#include "../Micheal-Lock-Free-List.h"
 
 
 
@@ -65,6 +65,29 @@ typedef struct cct_node_t cct_node_t;
 //******************************************************************************
 // type declarations
 //******************************************************************************
+
+typedef unsigned int uint;
+typedef uint so_key_t;
+typedef uint t_key;
+typedef void* val_t;
+
+
+typedef struct __node NodeType;
+
+
+//what is a markable pointer type
+typedef NodeType* MarkPtrType;
+
+
+//Node: contains key and next pointer
+struct __node {
+    so_key_t so_key;
+    t_key key;
+    val_t val;
+    bool isDummy;
+    _Atomic(MarkPtrType) next;
+};
+
 
 typedef struct sol_ht_object_channel_t sol_ht_object_channel_t;
 
@@ -94,6 +117,31 @@ typedef struct sol_ht_object_t {
   sol_ht_object_channel_t *channel;
   sol_ht_object_details_t details;
 } sol_ht_object_t;
+
+
+typedef MarkPtrType *segment_t;     // segment_t is an array of MarkType pointers
+
+
+typedef struct {
+    _Atomic(segment_t*) ST;                          // buckets (2D array of Marktype pointers)
+    _Atomic(segment_t*) old_ST;
+
+    atomic_size_t size;                            // hash table size
+    atomic_size_t old_size;
+
+    atomic_size_t count;                    // total nodes in hash table
+    
+    atomic_size_t resizing_state;
+    atomic_size_t next_init_block;
+    atomic_size_t num_initialized_blocks;
+    atomic_size_t next_move_block;
+    atomic_size_t num_moved_blocks;
+    pthread_rwlock_t resize_rwl;
+
+    _Atomic(hazard_ptr_node *) hp_head;
+    _Atomic(hazard_ptr_node *) hp_tail;
+    _Atomic(uint) hazard_pointers_count;        // initialize to 0
+} hashtable;
 
 
 

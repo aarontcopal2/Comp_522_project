@@ -172,9 +172,9 @@ static MarkPtrType initialize_bucket(hashtable *htab, uint bucket) {
     * it can access the elements from the appended bucket 
     * 2. Operations accessing the parent bucket will be able to insert elements in the child bucket if thats
     * needed to maintain the list order */
-    if (!list_insert(parent_bucket_ptr, dummy)) {
-        retire_node(dummy);
-        cur = list_search(parent_bucket_ptr, so_dummy_key(dummy->key));
+    if (!list_insert(htab, parent_bucket_ptr, dummy)) {
+        retire_node(htab, dummy);
+        cur = list_search(htab, parent_bucket_ptr, so_dummy_key(dummy->key));
         dummy = cur;
     }
     set_bucket(htab, bucket, dummy);
@@ -375,6 +375,9 @@ hashtable* hashtable_initialize () {
     atomic_init(&htab->num_moved_blocks, 0);
     atomic_init(&htab->resizing_state, 0);
     pthread_rwlock_init(&htab->resize_rwl, NULL);
+    atomic_init(&htab->hp_head, NULL);
+    atomic_init(&htab->hp_tail, NULL);
+    atomic_init(&htab->hazard_pointers_count, 0);
 
     segment_t *ST = malloc(sizeof(segment_t) * INITIAL_SEGMENTS);
     ST[0] = (MarkPtrType*)malloc(SEGMENT_SIZE * sizeof(MarkPtrType*));
@@ -423,7 +426,7 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
     // do we need to save the hash inside the node?
 
     // list_insert will fail if the key already exists
-    if (!list_insert(bucket_ptr, node)) {
+    if (!list_insert(htab, bucket_ptr, node)) {
         free(node);     // no issues with calling free() here, right?
         return false;
     }
@@ -446,7 +449,7 @@ val_t map_search(hashtable *htab, t_key key) {
     if (bucket_ptr == NULL) {
         bucket_ptr = initialize_bucket(htab, bucket);
     }
-    MarkPtrType result = list_search(bucket_ptr, so_regular_key(key));
+    MarkPtrType result = list_search(htab, bucket_ptr, so_regular_key(key));
     if (result && result->val) {
         return result->val;
     }
@@ -462,7 +465,7 @@ bool map_delete(hashtable *htab, t_key key) {
     if (bucket_ptr == NULL) {
         bucket_ptr = initialize_bucket(htab, bucket);
     }
-    if (!list_delete(bucket_ptr, so_regular_key(key))) {
+    if (!list_delete(htab, bucket_ptr, so_regular_key(key))) {
         return false;
     }
 

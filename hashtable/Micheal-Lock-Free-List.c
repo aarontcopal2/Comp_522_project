@@ -18,7 +18,6 @@
 
 #include "Micheal-Lock-Free-List.h"
 #include "splay-tree/splay-uint64.h"
-#include "channel/hashtable-memory-manager.h"
 
 
 
@@ -37,23 +36,6 @@
 //******************************************************************************
 
 // #define atomic_load(p)  ({ typeof(*p) __tmp = *(p); load_barrier (); __tmp; })
-
-
-
-//******************************************************************************
-// local data
-//******************************************************************************
-
-// variables for hazard pointers
-_Atomic(hazard_ptr_node *) hp_head;
-_Atomic(hazard_ptr_node *) hp_tail;
-__thread hazard_ptr_node *local_hp_head;
-_Atomic(uint) hazard_pointers_count;        // initialize to 0
-
-
-// variables for SMR
-__thread NodeType *retired_list_head;
-__thread uint retired_node_count = 0;
 
 
 
@@ -90,10 +72,24 @@ typedef struct typed_splay_node(int) {
 typedef typed_splay_node(int) splay_t;
 
 
-__thread splay_t *private_ht_root = 0;
-
-
 typed_splay_impl(int)
+
+
+
+//******************************************************************************
+// local data
+//******************************************************************************
+
+// variables for hazard pointers
+__thread hazard_ptr_node *local_hp_head;
+
+
+// variables for SMR
+__thread NodeType *retired_list_head;
+__thread uint retired_node_count = 0;
+
+
+__thread splay_t *private_ht_root = 0;
 
 
 
@@ -122,14 +118,15 @@ static bool is_node_deleted(MarkPtrType m_ptr) {
 }
 
 
-static hazard_ptr_node* get_thread_hazard_pointers() {
+static hazard_ptr_node* get_thread_hazard_pointers(hashtable *htab) {
     if (!local_hp_head) {
         /* how will we recycle/clear pointers for finished threads? 
         * if that is possible, we need not always malloc */
         hazard_ptr_node *hp;
         ANNOTATE_HAPPENS_BEFORE(hp);
         //hp = malloc(sizeof(hazard_ptr_node) * 3);
-        hp = &sol_ht_malloc()->details.hpn;
+        sol_ht_object_t *sol_obj = sol_ht_malloc();
+        hp = &(sol_obj->details.hpn);
 
         atomic_store(&hp[0].next, &hp[1]);
         atomic_store(&hp[1].next, &hp[2]);
@@ -137,32 +134,32 @@ static hazard_ptr_node* get_thread_hazard_pointers() {
         local_hp_head = hp;
 
 
-        if (atomic_compare_exchange_strong(&hp_head, &null_hp, local_hp_head)) {
+        if (atomic_compare_exchange_strong(&htab->hp_head, &null_hp, local_hp_head)) {
             // do we need to check if this returns true?
-            atomic_compare_exchange_strong(&hp_tail, &null_hp, &local_hp_head[2]);
+            atomic_compare_exchange_strong(&htab->hp_tail, &null_hp, &local_hp_head[2]);
         } else {
-            hazard_ptr_node *current_tail = atomic_load(&hp_tail);
-            if(atomic_compare_exchange_strong(&(atomic_load(&hp_tail)->next), &null_hp, local_hp_head)) {
+            hazard_ptr_node *current_tail = atomic_load(&htab->hp_tail);
+            if(atomic_compare_exchange_strong(&(atomic_load(&htab->hp_tail)->next), &null_hp, local_hp_head)) {
                 // do we need to check if this returns true?
-                atomic_compare_exchange_strong(&hp_tail, &current_tail, &local_hp_head[2]);
+                atomic_compare_exchange_strong(&htab->hp_tail, &current_tail, &local_hp_head[2]);
             }
             ANNOTATE_HAPPENS_AFTER(local_hp_head);
         }
-        atomic_fetch_add(&hazard_pointers_count, 3);
+        atomic_fetch_add(&htab->hazard_pointers_count, 3);
     }
     return local_hp_head;
 }
 
 
-static NodeType* get_hazard_pointer(int index) {
-    hazard_ptr_node *hpn = get_thread_hazard_pointers();
+static NodeType* get_hazard_pointer(hashtable *htab, int index) {
+    hazard_ptr_node *hpn = get_thread_hazard_pointers(htab);
     NodeType *hp = atomic_load(&hpn[index].hp);
     return hp;
 }
 
 
-static void set_hazard_pointer(NodeType* node, int index) {
-    hazard_ptr_node *hpn = get_thread_hazard_pointers();
+static void set_hazard_pointer(hashtable *htab, NodeType* node, int index) {
+    hazard_ptr_node *hpn = get_thread_hazard_pointers(htab);
 
     /* setting hp to null because hpn is thread local.
     * Other threads dont depend on this hazard pointer */
@@ -177,29 +174,29 @@ static void set_hazard_pointer(NodeType* node, int index) {
 }
 
 
-static void initialize_hazard_pointers() {
+static void initialize_hazard_pointers(hashtable *htab) {
     /*  This function is just to fix helgrind data-race errors
     * get_thread_hazard_pointers allocates memory for thread local hazard pointers
     * list_find is usually responsible for calling the same. But it may be possbile that list_find exits
     * before this call. Helgrind is reporting that there are conflcting calls for initialization from list_insert
     * list_delete and list_search. These reports are incorrect since thread local hazard pointer cant be accessed 
     * by concurrent threads. */
-    get_thread_hazard_pointers();
+    get_thread_hazard_pointers(htab);
 }
 
 
-static void clear_hazard_pointers() {
-    hazard_ptr_node *hp = get_thread_hazard_pointers();
+static void clear_hazard_pointers(hashtable *htab) {
+    hazard_ptr_node *hp = get_thread_hazard_pointers(htab);
     atomic_store(&hp[0].hp, NULL);
     atomic_store(&hp[1].hp, NULL);
     atomic_store(&hp[2].hp, NULL);
 }
 
 
-static MarkPtrType list_find(NodeType *head, so_key_t so_key, MarkPtrType *out_prev) {
+static MarkPtrType list_find(hashtable *htab, NodeType *head, so_key_t so_key, MarkPtrType *out_prev) {
     debug_print("list_find: %u\n", so_key);
     MarkPtrType prev = NULL, cur = NULL, next = NULL;
-    initialize_hazard_pointers();
+    initialize_hazard_pointers(htab);
 
     try_again:
         prev = head;
@@ -218,7 +215,7 @@ static MarkPtrType list_find(NodeType *head, so_key_t so_key, MarkPtrType *out_p
             // ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(cur);
             //ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(get_node(cur));
             so_key_t ckey = cur->so_key;
-            set_hazard_pointer(next, 0);
+            set_hazard_pointer(htab, next, 0);
             /* commented because cant see in kumpera implementation
             if (atomic_load(&cur) != create_mark_pointer(get_node(next), cmark)) {
                 goto try_again;
@@ -231,18 +228,18 @@ static MarkPtrType list_find(NodeType *head, so_key_t so_key, MarkPtrType *out_p
                     goto done;
                 }
                 prev = cur; // get_node(cur)->next; why does commented code work in paper and Kumpera?
-                set_hazard_pointer(cur, 2);
+                set_hazard_pointer(htab, cur, 2);
             } else {
                 MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
                 if (prev == expected) {
                     prev = create_mark_pointer(get_node(next), 0);
-                    retire_node(cur);
+                    retire_node(htab, cur);
                 } else {
                     goto try_again;
                 }
             }
             cur = next;
-            set_hazard_pointer(next, 1);
+            set_hazard_pointer(htab, next, 1);
         }
     done:
         *out_prev = prev;
@@ -311,13 +308,13 @@ static void global_scan_for_reclaimable_nodes() {
 //******************************************************************************
 
 // retired nodes are nodes marked for deletion, but cant be freed/reused unless checked
-void retire_node(NodeType *node) {
+void retire_node(hashtable *htab, NodeType *node) {
     debug_print("retiring node: %u\n", node->key);
     /* In the paper, RETIRE_THRESHOLD = H + omega(H); where H is total no. of hazard pointers
     * what is omega(H)? Shouldnt RETIRE_THRESHOLD < H and not >= H? 
     * RETIRE_THRESHOLD should be small so that unneeded nodes are removed on regular basis
     * large threshold values will cause problems in case of idle threads */
-    uint RETIRE_THRESHOLD = atomic_load(&hazard_pointers_count) + 10;
+    uint RETIRE_THRESHOLD = atomic_load(&htab->hazard_pointers_count) + 10;
 
     // can we safely change the next pointer of node to null?
     atomic_store(&node->next, NULL);
@@ -329,28 +326,28 @@ void retire_node(NodeType *node) {
     }
     retired_node_count++;
     if (retired_node_count >= RETIRE_THRESHOLD) {
-        local_scan_for_reclaimable_nodes(atomic_load(&hp_head));
+        local_scan_for_reclaimable_nodes(atomic_load(&htab->hp_head));
         global_scan_for_reclaimable_nodes();
     }
 }
 
 
-MarkPtrType list_search(MarkPtrType head, so_key_t key) {
+MarkPtrType list_search(hashtable *htab, MarkPtrType head, so_key_t key) {
     MarkPtrType prev;
-    MarkPtrType node = list_find(head, key, &prev);
-    clear_hazard_pointers();
+    MarkPtrType node = list_find(htab, head, key, &prev);
+    clear_hazard_pointers(htab);
     return node;
 }
 
 
-bool list_insert(MarkPtrType head, NodeType *node) {
+bool list_insert(hashtable *htab, MarkPtrType head, NodeType *node) {
     debug_print("list_insert: %p\n", node);
     bool result;
     MarkPtrType cur, prev;
     so_key_t so_key = node->so_key;
 
     while (true) {
-        cur = list_find(head, so_key, &prev);
+        cur = list_find(htab, head, so_key, &prev);
         if (cur && cur->so_key == so_key) {
             result = false;
             break;
@@ -368,22 +365,22 @@ bool list_insert(MarkPtrType head, NodeType *node) {
             break;
         }
     }
-    clear_hazard_pointers();
+    clear_hazard_pointers(htab);
     return result;
 }
 
 
-bool list_delete(MarkPtrType head, so_key_t key) {
+bool list_delete(hashtable *htab, MarkPtrType head, so_key_t key) {
     bool result;
     MarkPtrType cur, next, prev;
 
     while (true) {
-        cur = list_find(head, key, &prev);
+        cur = list_find(htab, head, key, &prev);
         if (!cur || cur->so_key != key) {
             result = false;
             break;
         }
-        next = get_hazard_pointer(0);
+        next = get_hazard_pointer(htab, 0);
 
         /* cur->next will contain pointer to next node. Its last bit will denote if cur is marked for deletion.
         * bit=0/1 -> not-deleted/deleted */
@@ -401,13 +398,13 @@ bool list_delete(MarkPtrType head, so_key_t key) {
 
         // if expected matches, make prev point to next
         if (atomic_compare_exchange_strong(&(prev->next), &expected, create_mark_pointer(next, 0))) {
-            retire_node(cur);
+            retire_node(htab, cur);
         } else {
-            list_find(head, key, &prev); // Note: Kumpera implementation commented this
+            list_find(htab, head, key, &prev); // Note: Kumpera implementation commented this
         }
         result = true;
         break;
     }
-    clear_hazard_pointers();
+    clear_hazard_pointers(htab);
     return result;
 }

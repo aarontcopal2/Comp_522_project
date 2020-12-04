@@ -16,32 +16,7 @@
 //******************************************************************************
 
 #include "Micheal-Lock-Free-List.h"
-
-
-
-//******************************************************************************
-// type definitions
-//******************************************************************************
-
-typedef MarkPtrType *segment_t;     // segment_t is an array of MarkType pointers
-
-
-typedef struct {
-    _Atomic(segment_t*) ST;                          // buckets (2D array of Marktype pointers)
-    _Atomic(segment_t*) old_ST;
-
-    atomic_size_t size;                            // hash table size
-    atomic_size_t old_size;
-
-    atomic_size_t count;                    // total nodes in hash table
-    
-    atomic_size_t resizing_state;
-    atomic_size_t next_init_block;
-    atomic_size_t num_initialized_blocks;
-    atomic_size_t next_move_block;
-    atomic_size_t num_moved_blocks;
-    pthread_rwlock_t resize_rwl;
-} hashtable;
+#include "channel/hashtable-memory-manager.h"
 
 
 

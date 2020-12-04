@@ -35,7 +35,7 @@ struct __node {
     t_key key;
     val_t val;
     bool isDummy;
-    MarkPtrType next;
+    _Atomic(MarkPtrType) next;
 };
 
 

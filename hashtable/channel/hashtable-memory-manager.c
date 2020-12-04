@@ -83,23 +83,24 @@ static __thread sol_ht_object_channel_t *sol_ht_object_channel;
 //******************************************************************************
 
 static sol_ht_object_channel_t *
-opencl_object_channel_alloc
+sol_object_channel_alloc
 (
  void
 )
 {
+  // hpcrun_malloc_safe needed instead of malloc
   return malloc(sizeof(sol_ht_object_channel_t));
 }
 
 
 static sol_ht_object_channel_t *
-opencl_object_channel_get
+sol_object_channel_get
 (
  void
 )
 {
   if (sol_ht_object_channel == NULL) {
-    sol_ht_object_channel = opencl_object_channel_alloc();
+    sol_ht_object_channel = sol_object_channel_alloc();
   }
   return sol_ht_object_channel;
 }
@@ -116,11 +117,11 @@ sol_ht_malloc
  void
 )
 {
-  sol_ht_object_channel_t *c = opencl_object_channel_get();
-  sol_ht_object_t *cl_obj = channel_item_alloc(c, sol_ht_object_t);
-  memset(cl_obj, 0, sizeof(sol_ht_object_t));
-  cl_obj->channel = c;
-  return cl_obj;
+  sol_ht_object_channel_t *c = sol_object_channel_get();
+  sol_ht_object_t *sol_obj = channel_item_alloc(c, sol_ht_object_t);
+  memset(sol_obj, 0, sizeof(sol_ht_object_t));
+  sol_obj->channel = c;
+  return sol_obj;
 }
 
 

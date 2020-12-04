@@ -7,7 +7,7 @@
 
 #include <stdint.h>     // uint64_t, uintptr_t
 #include <pthread.h>    // pthread_rwlock_t, pthread_rwlock_init
-#include <stdatomic.h>  // atomic_fetch_add, atomic_size_t
+#include "channel/lib/prof-lean/stdatomic.h"  // atomic_fetch_add, atomic_size_t
 
 
 
@@ -27,11 +27,11 @@ typedef MarkPtrType *segment_t;     // segment_t is an array of MarkType pointer
 
 
 typedef struct {
-    segment_t *ST;                          // buckets (2D array of Marktype pointers)
-    segment_t *old_ST;
+    _Atomic(segment_t*) ST;                          // buckets (2D array of Marktype pointers)
+    _Atomic(segment_t*) old_ST;
 
-    size_t size;                            // hash table size
-    size_t old_size;
+    atomic_size_t size;                            // hash table size
+    atomic_size_t old_size;
 
     atomic_size_t count;                    // total nodes in hash table
     

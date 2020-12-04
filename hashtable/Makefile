@@ -7,11 +7,21 @@ CXX_VERSION=
 LIBS=-latomic -lpthread
 MKDIR_P = mkdir -p
 
-all: Micheal-Lock-Free-List.c Split-Ordered-Lists.c splay-tree/splay-uint64.c
+all: memory-manager Micheal-Lock-Free-List.c Split-Ordered-Lists.c splay-tree/splay-uint64.c
 	$(MKDIR_P) build
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/splay-uint64.o splay-tree/splay-uint64.c -c
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/Micheal-Lock-Free-List.o Micheal-Lock-Free-List.c -c
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/Split-Ordered-Lists.o Split-Ordered-Lists.c -c
+
+
+memory-manager:	channel/hashtable-memory-manager.c
+	$(MKDIR_P) build
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/stacks.o channel/lib/prof-lean/stacks.c -c
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/bistack.o channel/lib/prof-lean/bistack.c -c
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/bichannel.o channel/lib/prof-lean/bichannel.c -c
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/gpu-channel-item-allocator.o channel/hpcrun/gpu/gpu-channel-item-allocator.c -c
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/hashtable-memory-manager.o channel/hashtable-memory-manager.c -c
+	
 	
 
 clean:

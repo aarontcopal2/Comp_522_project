@@ -52,6 +52,7 @@
 
 #include "lib/prof-lean/bistack.h"
 #include "hpcrun/gpu/gpu-activity.h"
+#include "../Micheal-Lock-Free-List.h"
 
 
 
@@ -71,7 +72,19 @@ typedef struct sol_ht_object_channel_t sol_ht_object_channel_t;
 typedef struct gpu_activity_channel_t gpu_activity_channel_t;
 
 
+typedef struct __hp_node hazard_ptr_node;
+
+struct __hp_node {
+    _Atomic(NodeType*) hp;
+    _Atomic(hazard_ptr_node*) next;
+};
+
+
 typedef struct sol_ht_object_details_t {
+  union {
+    hazard_ptr_node hpn;
+    NodeType node;
+  };
   gpu_activity_channel_t *initiator_channel;
 } sol_ht_object_details_t;
 

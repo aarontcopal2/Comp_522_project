@@ -8,7 +8,7 @@
 //******************************************************************************
 
 #include <stdlib.h>     // NULL
-#include <stdatomic.h>  // atomic_fetch_add
+#include "channel/lib/prof-lean/stdatomic.h"  // atomic_fetch_add
 
 
 
@@ -39,24 +39,16 @@
 // #define atomic_load(p)  ({ typeof(*p) __tmp = *(p); load_barrier (); __tmp; })
 
 
-typedef struct __hp_node hazard_ptr_node;
-
-struct __hp_node {
-    NodeType *hp;
-    hazard_ptr_node *next;
-};
-
-
 
 //******************************************************************************
 // local data
 //******************************************************************************
 
 // variables for hazard pointers
-hazard_ptr_node *hp_head;
-hazard_ptr_node *hp_tail;
+_Atomic(hazard_ptr_node *) hp_head;
+_Atomic(hazard_ptr_node *) hp_tail;
 __thread hazard_ptr_node *local_hp_head;
-uint hazard_pointers_count = 0;
+_Atomic(uint) hazard_pointers_count;        // initialize to 0
 
 
 // variables for SMR
@@ -125,40 +117,47 @@ static uintptr_t get_mask_bit(MarkPtrType m_ptr) {
 }
 
 
+static bool is_node_deleted(MarkPtrType m_ptr) {
+    return (get_mask_bit(m_ptr) == 1);
+}
+
+
 static hazard_ptr_node* get_thread_hazard_pointers() {
     if (!local_hp_head) {
         /* how will we recycle/clear pointers for finished threads? 
         * if that is possible, we need not always malloc */
         hazard_ptr_node *hp;
         ANNOTATE_HAPPENS_BEFORE(hp);
-        hp = malloc(sizeof(hazard_ptr_node) * 3);
-        hp[0].next = &hp[1];
-        hp[1].next = &hp[2];
-        hazard_ptr_node *null_hp = NULL;
+        //hp = malloc(sizeof(hazard_ptr_node) * 3);
+        hp = &sol_ht_malloc()->details.hpn;
 
-        if (!atomic_compare_exchange_strong(&local_hp_head, &null_hp, hp)) {
-            free(hp);
+        atomic_store(&hp[0].next, &hp[1]);
+        atomic_store(&hp[1].next, &hp[2]);
+        hazard_ptr_node *null_hp = NULL;
+        local_hp_head = hp;
+
+
+        if (atomic_compare_exchange_strong(&hp_head, &null_hp, local_hp_head)) {
+            // do we need to check if this returns true?
+            atomic_compare_exchange_strong(&hp_tail, &null_hp, &local_hp_head[2]);
         } else {
-            if (atomic_compare_exchange_strong(&hp_head, &null_hp, local_hp_head)) {
+            hazard_ptr_node *current_tail = atomic_load(&hp_tail);
+            if(atomic_compare_exchange_strong(&(atomic_load(&hp_tail)->next), &null_hp, local_hp_head)) {
                 // do we need to check if this returns true?
-                atomic_compare_exchange_strong(&hp_tail, &null_hp, &local_hp_head[2]);
-            } else {
-                hazard_ptr_node *current_tail = hp_tail;
-                if(atomic_compare_exchange_strong(&(hp_tail->next), &null_hp, local_hp_head)) {
-                    // do we need to check if this returns true?
-                    atomic_compare_exchange_strong(&hp_tail, &current_tail, &local_hp_head[2]);
-                }
-                ANNOTATE_HAPPENS_AFTER(local_hp_head);
+                atomic_compare_exchange_strong(&hp_tail, &current_tail, &local_hp_head[2]);
             }
-            atomic_fetch_add(&hazard_pointers_count, 3);
+            ANNOTATE_HAPPENS_AFTER(local_hp_head);
         }
+        atomic_fetch_add(&hazard_pointers_count, 3);
     }
     return local_hp_head;
 }
 
 
 static NodeType* get_hazard_pointer(int index) {
-    return get_thread_hazard_pointers()[index].hp;
+    hazard_ptr_node *hpn = get_thread_hazard_pointers();
+    NodeType *hp = atomic_load(&hpn[index].hp);
+    return hp;
 }
 
 
@@ -174,7 +173,7 @@ static void set_hazard_pointer(NodeType* node, int index) {
     atomic_compare_exchange_strong(&hpn[index].hp, &null_hp, node);
     */
     // no need for atomic CAS for thread local changes
-    hpn[index].hp = node;
+    atomic_store(&hpn[index].hp, node);
 }
 
 
@@ -191,20 +190,20 @@ static void initialize_hazard_pointers() {
 
 static void clear_hazard_pointers() {
     hazard_ptr_node *hp = get_thread_hazard_pointers();
-    hp[0].hp = NULL;
-    hp[1].hp = NULL;
-    hp[2].hp = NULL;
+    atomic_store(&hp[0].hp, NULL);
+    atomic_store(&hp[1].hp, NULL);
+    atomic_store(&hp[2].hp, NULL);
 }
 
 
 static MarkPtrType list_find(NodeType *head, so_key_t so_key, MarkPtrType *out_prev) {
     debug_print("list_find: %u\n", so_key);
-    MarkPtrType prev, cur, next;
+    MarkPtrType prev = NULL, cur = NULL, next = NULL;
     initialize_hazard_pointers();
 
     try_again:
         prev = head;
-        cur = get_node(prev)->next;
+        cur = atomic_load(&get_node(prev)->next);
         /*set_hazard_pointer(cur, 1);
         if (atomic_load(prev) != create_mark_pointer(get_node(cur), 0)) {
             goto try_again;
@@ -214,17 +213,17 @@ static MarkPtrType list_find(NodeType *head, so_key_t so_key, MarkPtrType *out_p
                 goto done;
             }
             bool cmark = get_mask_bit(cur);
-            ANNOTATE_HAPPENS_AFTER(cur);
-            next = get_node(cur)->next;
+            //ANNOTATE_HAPPENS_AFTER(cur);
+            next = atomic_load(&get_node(cur)->next);
             // ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(cur);
-            ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(get_node(cur));
+            //ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(get_node(cur));
             so_key_t ckey = cur->so_key;
             set_hazard_pointer(next, 0);
             /* commented because cant see in kumpera implementation
             if (atomic_load(&cur) != create_mark_pointer(get_node(next), cmark)) {
                 goto try_again;
             }*/
-            if (prev->next != create_mark_pointer(get_node(cur), 0)) {
+            if (atomic_load(&prev->next) != create_mark_pointer(get_node(cur), 0)) {
                goto try_again;
             }
             if (!cmark) {
@@ -235,8 +234,8 @@ static MarkPtrType list_find(NodeType *head, so_key_t so_key, MarkPtrType *out_p
                 set_hazard_pointer(cur, 2);
             } else {
                 MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
-                if (atomic_compare_exchange_strong(&prev,
-                        &expected, create_mark_pointer(get_node(next), 0))) {
+                if (prev == expected) {
+                    prev = create_mark_pointer(get_node(next), 0);
                     retire_node(cur);
                 } else {
                     goto try_again;
@@ -247,7 +246,11 @@ static MarkPtrType list_find(NodeType *head, so_key_t so_key, MarkPtrType *out_p
         }
     done:
         *out_prev = prev;
-        return cur;
+        MarkPtrType result = cur;
+        if (is_node_deleted(cur) || get_node(cur) == NULL) {
+            result = NULL;
+        }
+        return result;
 }
 
 
@@ -263,10 +266,11 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
     // stage1: Scan hp_head list and insert all non-null nodes to private hashtable phtable
     hazard_ptr_node *hp_ref = hp_head;
     while (hp_ref) {
-        if (hp_ref->hp) {
-            st_insert(&private_ht_root, splay_node((uint64_t)hp_ref->hp));
+        NodeType *n;
+        if (n = atomic_load(&hp_ref->hp)) {
+            st_insert(&private_ht_root, splay_node((uint64_t)n));
         }
-        hp_ref = hp_ref->next;
+        hp_ref = atomic_load(&hp_ref->next);
     }
 
     // stage2: check for all nodes in retired_list_head list to see if its present in phtable
@@ -280,7 +284,7 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
             * another private list of free nodes. Each thread will first check if it has elements
             * in its free-list before mallocing */
         }
-        retired_list_ref = retired_list_ref->next;
+        retired_list_ref = atomic_load(&retired_list_ref->next);
     }
 }
 
@@ -306,19 +310,19 @@ void retire_node(NodeType *node) {
     * what is omega(H)? Shouldnt RETIRE_THRESHOLD < H and not >= H? 
     * RETIRE_THRESHOLD should be small so that unneeded nodes are removed on regular basis
     * large threshold values will cause problems in case of idle threads */
-    uint RETIRE_THRESHOLD = (hazard_pointers_count > 10) ? 10 : hazard_pointers_count;
+    uint RETIRE_THRESHOLD = atomic_load(&hazard_pointers_count) + 10;
 
     // can we safely change the next pointer of node to null?
-    node->next = NULL;
+    atomic_store(&node->next, NULL);
 
     if (retired_list_head) {
-        retired_list_head->next = node;
+        atomic_store(&retired_list_head->next, node);
     } else {
         retired_list_head = node;
     }
     retired_node_count++;
     if (retired_node_count >= RETIRE_THRESHOLD) {
-        local_scan_for_reclaimable_nodes(hp_head);
+        local_scan_for_reclaimable_nodes(atomic_load(&hp_head));
         global_scan_for_reclaimable_nodes();
     }
 }
@@ -348,8 +352,8 @@ bool list_insert(MarkPtrType head, NodeType *node) {
         // since we are calling find, we are inserting the element in a sorted order in the list
         // sort order is based on split-order i.e reversed bits
         // creating a link from prev->node and node->cur (while removing prev->cur)
-        node->next = create_mark_pointer(get_node(cur), 0);
-        ANNOTATE_HAPPENS_AFTER(node->next);
+        atomic_store(&node->next, create_mark_pointer(get_node(cur), 0));
+        // ANNOTATE_HAPPENS_AFTER(node->next);
         //ANNOTATE_HAPPENS_AFTER(node);
         MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
         if (atomic_compare_exchange_strong(&(prev->next), &expected, create_mark_pointer(node, 0))) {

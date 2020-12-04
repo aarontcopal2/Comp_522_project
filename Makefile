@@ -6,12 +6,13 @@ OPT=-g
 CXX_VERSION=
 LIBS=-latomic -lpthread
 BUILD_DIR=hashtable/build
+# BUILD_OBJS = $(wildcard $(BUILD_DIR)/*.o) make needs to run twice for this to work
+BUILD_OBJS =hashtable/build/Split-Ordered-Lists.o hashtable/build/stacks.o hashtable/build/bistack.o hashtable/build/bichannel.o hashtable/build/gpu-channel-item-allocator.o hashtable/build/hashtable-memory-manager.o hashtable/build/Micheal-Lock-Free-List.o hashtable/build/splay-uint64.o
 HELGRIND_PARAMS=--free-is-write=yes --history-level=full --show-error-list=yes --suppressions=$(shell pwd)/helgrind_suppression.supp
 
 all:
 	$(MAKE) -C "hashtable" all
-	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o main main.c $(BUILD_DIR)/Split-Ordered-Lists.o \
-						$(BUILD_DIR)/Micheal-Lock-Free-List.o $(BUILD_DIR)/splay-uint64.o
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o main main.c $(BUILD_OBJS)
 
 
 helgrind: all

@@ -60,7 +60,7 @@
 // local includes
 //*****************************************************************************
 
-#include <stdatomic.h>
+#include "stdatomic.h"
 
 
 

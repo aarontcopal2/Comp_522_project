@@ -16,6 +16,7 @@
 //******************************************************************************
 
 #include "hashtable/Split-Ordered-Lists.h"
+#include "main.h"
 
 
 
@@ -23,19 +24,19 @@
 // type definitions
 //******************************************************************************
 
-typedef struct {
-    int apartment_no;
-    char *street_name;
-} address;
-
-
 #define DEBUG 0
 #define debug_print(fmt, ...) \
     do { if (DEBUG) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)
 
 
+
+//******************************************************************************
+// local data
+//******************************************************************************
+
 hashtable *htab;
 
+#define ADDRESS_SIZE 123
 
 
 //******************************************************************************
@@ -50,18 +51,17 @@ static void print_address(address *addr) {
     /* We use sprintf + write instead of printf. Helgrind reports data-races for the latter */
     char buffer[75];
     int stdout = 1;
-    int char_count = sprintf(buffer, "address: {\n\tapartment_no: %d,\n\tstreet_name: %s\n}\n", 
-        addr->apartment_no, addr->street_name);
+    int char_count = sprintf(buffer, "address:  %s\n", addr->street_name);
     write(stdout, buffer, char_count);
 }
 
 
-void *hashtable_operations(void *arg) {
+void *small_hashtable_operations(void *arg) {
     bool status;
-    address addrs[11] = {{232, "Maroneal Street"}, {705, "LBS Road"}, {402, "Kensington SEZ"},
+    /* address addrs[11] = {{232, "Maroneal Street"}, {705, "LBS Road"}, {402, "Kensington SEZ"},
                     {0, "MGLR"},{0, "JVLR"}, {489, "E. Edgefield Street"}, {839, "NW. Mountainview St"},
                     {298, "Cambridge Lane"}, {8166, "John Road"}, {88, "Brickyard Rd"},
-                    {180, "Pleasant Dr."}};
+                    {180, "Pleasant Dr."}}; */
 
     uint t_index = pthread_self();
     int index = *(int*)arg;
@@ -82,6 +82,28 @@ void *hashtable_operations(void *arg) {
 }
 
 
+void *hashtable_operations(void *arg) {
+    bool status;
+    uint t_index = pthread_self();
+    int random_start_index = t_index % (ADDRESS_SIZE-20);
+    debug_print("thread: %u. index: %d\n", t_index, random_start_index);
+
+    for (int i = 0; i < 20; i++) {
+        t_key key = random_start_index + i;
+        val_t val = (void*)&addrs[key];
+        status = map_insert(htab, key, val);
+
+        address *result_val = (address*) map_search(htab, key);
+        print_address(result_val);
+
+        status = map_delete(htab, key);
+
+        result_val = (address*) map_search(htab, key);
+        print_address(result_val);   
+    }
+}
+
+
 
 //******************************************************************************
 // interface operations
@@ -92,10 +114,11 @@ int main () {
 
     pthread_t thr;
     int indices[11] = {0, 1, 2, 3, 4, 5, 6, 7 ,8, 9, 10};
-    for (int i = 0; i < 11; i++) {
-        pthread_create(&thr, NULL, hashtable_operations, &indices[i]);
+    for (int i = 0; i < 5; i++) {
+        pthread_create(&thr, NULL, hashtable_operations, &i);
         ANNOTATE_HAPPENS_BEFORE(indices[i]);
     }
     pthread_join(thr, NULL);
+    
     hashtable_destroy(htab);
 }

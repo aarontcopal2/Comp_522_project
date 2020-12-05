@@ -127,6 +127,7 @@ static hazard_ptr_node* get_thread_hazard_pointers(hashtable *htab) {
         //hp = malloc(sizeof(hazard_ptr_node) * 3);
         sol_ht_object_t *sol_obj = sol_ht_malloc();
         hp = &(sol_obj->details.hpn);
+        hp->sol_obj_ref = sol_obj;
 
         atomic_store(&hp[0].next, &hp[1]);
         atomic_store(&hp[1].next, &hp[2]);
@@ -268,12 +269,13 @@ splay_t* splay_node(uint64_t key) {
 
 static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
     // stage1: Scan hp_head list and insert all non-null nodes to private hashtable phtable
+    printf("local_scan_for_reclaimable_nodes\n");
     hazard_ptr_node *hp_ref = hp_head;
-    while (hp_ref) {
-        NodeType *n;
-        if (n = atomic_load(&hp_ref->hp)) {
-            st_insert(&private_ht_root, splay_node((uint64_t)n));
-        }
+    while (hp_ref && atomic_load(&hp_ref->hp)) {
+        NodeType *n = atomic_load(&hp_ref->hp);
+        splay_t *node = splay_node((uint64_t)n);
+        st_insert(&private_ht_root, node);
+        free(node);
         hp_ref = atomic_load(&hp_ref->next);
     }
 
@@ -284,6 +286,8 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
         if (st_lookup(&private_ht_root, (uint64_t)retired_list_ref) == NULL) {
             // node can be safely reclaimed
 
+            sol_ht_object_t *parent_obj = retired_list_ref->sol_obj_ref;
+            sol_ht_free(parent_obj);
             /* what do we do with nodes that are safe for reclamation? We can push such nodes to 
             * another private list of free nodes. Each thread will first check if it has elements
             * in its free-list before mallocing */

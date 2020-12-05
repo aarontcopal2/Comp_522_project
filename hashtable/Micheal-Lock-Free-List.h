@@ -8,7 +8,6 @@
 #include <stdbool.h>     // bool, false, true
 #include <stdint.h>     // uint64_t, uintptr_t
 #include <stdio.h>      // printf
-#include <valgrind/helgrind.h>  // ANNOTATE_HAPPENS_AFTER, ANNOTATE_HAPPENS_BEFORE
 
 
 
@@ -19,12 +18,6 @@
 #include "Micheal-Lock-Free-List.h"
 #include "splay-tree/splay-uint64.h"
 #include "channel/hashtable-memory-manager.h"
-
-
-
-//******************************************************************************
-// type definitions
-//******************************************************************************
 
 
 

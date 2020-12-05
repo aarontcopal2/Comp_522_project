@@ -44,6 +44,12 @@
 #ifndef SOL_HT_MEMORY_MANAGER_H
 #define SOL_HT_MEMORY_MANAGER_H
 
+//******************************************************************************
+// system includes
+//******************************************************************************
+
+#include <valgrind/helgrind.h>  // ANNOTATE_HAPPENS_AFTER, ANNOTATE_HAPPENS_BEFORE
+
 
 
 //******************************************************************************
@@ -52,7 +58,6 @@
 
 #include "lib/prof-lean/bistack.h"
 #include "hpcrun/gpu/gpu-activity.h"
-//#include "../Micheal-Lock-Free-List.h"
 
 
 
@@ -66,6 +71,8 @@ typedef struct cct_node_t cct_node_t;
 // type declarations
 //******************************************************************************
 
+
+typedef struct sol_ht_object_t sol_ht_object_t;
 typedef unsigned int uint;
 typedef uint so_key_t;
 typedef uint t_key;
@@ -85,6 +92,7 @@ struct __node {
     t_key key;
     val_t val;
     bool isDummy;
+    sol_ht_object_t *sol_obj_ref;
     _Atomic(MarkPtrType) next;
 };
 
@@ -99,6 +107,7 @@ typedef struct __hp_node hazard_ptr_node;
 
 struct __hp_node {
     _Atomic(NodeType*) hp;
+    sol_ht_object_t *sol_obj_ref;
     _Atomic(hazard_ptr_node*) next;
 };
 

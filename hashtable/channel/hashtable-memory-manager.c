@@ -119,6 +119,7 @@ sol_ht_malloc
 {
   sol_ht_object_channel_t *c = sol_object_channel_get();
   sol_ht_object_t *sol_obj = channel_item_alloc(c, sol_ht_object_t);
+  VALGRIND_HG_CLEAN_MEMORY(sol_obj, sizeof(sol_ht_object_t));
   memset(sol_obj, 0, sizeof(sol_ht_object_t));
   sol_obj->channel = c;
   return sol_obj;

@@ -154,15 +154,18 @@ static MarkPtrType initialize_bucket(hashtable *htab, uint bucket) {
         parent_bucket_ptr = initialize_bucket(htab, parent);
     }
 
-    NodeType *dummy = malloc(sizeof(NodeType));
+    // NodeType *dummy = malloc(sizeof(NodeType));
+    sol_ht_object_t *sol_obj = sol_ht_malloc();
+    NodeType *dummy = &(sol_obj->details.node);
     dummy->so_key = so_dummy_key(bucket);      // is this param correct?
     dummy->key = bucket;
     dummy->isDummy = true;
+    dummy->sol_obj_ref = sol_obj;
     atomic_init(&dummy->next, NULL);
     ANNOTATE_HAPPENS_BEFORE(dummy);
     // do we need to save the hash inside the node?
 
-    /* if another thread began initialization of the same bucket, but didnt complete then adding dummy again will fail
+    /* if another thread began initialization of the same bucket, and completed before current thread, then dummy insertion will fail
     * if so, we delete allocated dummy node of current thread and instead use the dummy node of the successful thread(cur points to the dummy node of that thread) */
     
     /* As the table size increases, the bucket values calculated for a key will either stay same or increase.
@@ -173,8 +176,8 @@ static MarkPtrType initialize_bucket(hashtable *htab, uint bucket) {
     * 2. Operations accessing the parent bucket will be able to insert elements in the child bucket if thats
     * needed to maintain the list order */
     if (!list_insert(htab, parent_bucket_ptr, dummy)) {
+        cur = list_search(htab, parent_bucket_ptr, so_dummy_key(bucket));
         retire_node(htab, dummy);
-        cur = list_search(htab, parent_bucket_ptr, so_dummy_key(dummy->key));
         dummy = cur;
     }
     set_bucket(htab, bucket, dummy);
@@ -324,6 +327,7 @@ static void resize_primary(hashtable *htab) {
 
     // freeing old table
     free(atomic_load(&htab->old_ST));
+    // free child segments?
 
     // change state from cleaning to no_resizing
     resize_state = atomic_fetch_xor(&htab->resizing_state, CLEANING ^ NO_RESIZING);
@@ -332,6 +336,7 @@ static void resize_primary(hashtable *htab) {
 
 static void resize_hashtable(hashtable *htab) {
     debug_print("resize_hashtable()\n");
+    printf("resize_hashtable()\n");
 
     /* resizing requires mallocing a new memory region and copying old values to this new region and swapping the data structure pointers
     * This operation needs to be atomic, else we may loose some insertions happening between memcpy and swapping of old table with new
@@ -387,10 +392,14 @@ hashtable* hashtable_initialize () {
     atomic_init(&htab->ST, ST);
     // adding a dummy node for key = 0. Without this node, intialize bucket calls to bucket=0 will be stuck in an infinite loop
     t_key start_key = 0;
-    NodeType *start_node = malloc(sizeof(NodeType));
+
+    // NodeType *start_node = malloc(sizeof(NodeType));
+    sol_ht_object_t *sol_obj = sol_ht_malloc();
+    NodeType *start_node = &(sol_obj->details.node);
     start_node->so_key = so_dummy_key(start_key);
     start_node->key = start_key;
     start_node->isDummy = true;
+    start_node->sol_obj_ref = sol_obj;
     atomic_init(&start_node->next, NULL);
     set_bucket(htab, start_key, start_node);
 
@@ -400,6 +409,7 @@ hashtable* hashtable_initialize () {
 
 void hashtable_destroy(hashtable *htab) {
     free(atomic_load(&htab->ST));
+    // free child segments?
     pthread_rwlock_destroy(&htab->resize_rwl);
     // free hazard pointers and related data-structures
 }
@@ -416,11 +426,14 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
     }
 
     // inside the node, key is stored in split-ordered form
-    NodeType *node = malloc(sizeof(NodeType));
+    // NodeType *node = malloc(sizeof(NodeType));
+    sol_ht_object_t *sol_obj = sol_ht_malloc();
+    NodeType *node = &(sol_obj->details.node);
     node->so_key = so_regular_key(key);
     node->key = key;
     node->val = val;
     node->isDummy = false;
+    node->sol_obj_ref = sol_obj;
     atomic_init(&node->next, NULL);
     
     // do we need to save the hash inside the node?

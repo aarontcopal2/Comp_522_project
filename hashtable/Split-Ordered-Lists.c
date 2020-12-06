@@ -175,8 +175,8 @@ static MarkPtrType initialize_bucket(hashtable *htab, uint bucket) {
     * it can access the elements from the appended bucket 
     * 2. Operations accessing the parent bucket will be able to insert elements in the child bucket if thats
     * needed to maintain the list order */
-    if (!list_insert(htab, parent_bucket_ptr, dummy)) {
-        cur = list_search(htab, parent_bucket_ptr, so_dummy_key(bucket));
+    if (!list_insert(htab, &parent_bucket_ptr, dummy)) {
+        cur = list_search(htab, &parent_bucket_ptr, so_dummy_key(bucket));
         retire_node(htab, dummy);
         dummy = cur;
     }
@@ -400,7 +400,7 @@ hashtable* hashtable_initialize () {
     start_node->key = start_key;
     start_node->isDummy = true;
     start_node->sol_obj_ref = sol_obj;
-    atomic_init(&start_node->next, NULL);
+    // atomic_init(&start_node->next, NULL);
     set_bucket(htab, start_key, start_node);
 
     return htab;
@@ -439,7 +439,7 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
     // do we need to save the hash inside the node?
 
     // list_insert will fail if the key already exists
-    if (!list_insert(htab, bucket_ptr, node)) {
+    if (!list_insert(htab, &bucket_ptr, node)) {
         free(node);     // no issues with calling free() here, right?
         return false;
     }
@@ -462,7 +462,7 @@ val_t map_search(hashtable *htab, t_key key) {
     if (bucket_ptr == NULL) {
         bucket_ptr = initialize_bucket(htab, bucket);
     }
-    MarkPtrType result = list_search(htab, bucket_ptr, so_regular_key(key));
+    MarkPtrType result = list_search(htab, &bucket_ptr, so_regular_key(key));
     if (result && result->val) {
         return result->val;
     }
@@ -478,7 +478,7 @@ bool map_delete(hashtable *htab, t_key key) {
     if (bucket_ptr == NULL) {
         bucket_ptr = initialize_bucket(htab, bucket);
     }
-    if (!list_delete(htab, bucket_ptr, so_regular_key(key))) {
+    if (!list_delete(htab, &bucket_ptr, so_regular_key(key))) {
         return false;
     }
 

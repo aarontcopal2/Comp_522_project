@@ -35,7 +35,7 @@ void retire_node
 MarkPtrType list_search
 (
     hashtable *htab,
-    MarkPtrType head,
+    MarkPtrType *head,
     so_key_t key
 );
 
@@ -43,7 +43,7 @@ MarkPtrType list_search
 bool list_insert
 (
     hashtable *htab,
-    MarkPtrType head,
+    MarkPtrType *head,
     NodeType *node
 );
 
@@ -51,7 +51,7 @@ bool list_insert
 bool list_delete
 (
     hashtable *htab,
-    MarkPtrType head,
+    MarkPtrType *head,
     so_key_t key
 );
 

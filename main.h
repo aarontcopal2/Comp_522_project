@@ -12,7 +12,8 @@ typedef struct {
 // local data
 //******************************************************************************
 
-address addrs[123] = {{"716 Glenlake Ave. "},
+address addrs[123] = {
+{"716 Glenlake Ave. "},
 {"Powhatan, VA 23139"},
 {"9628 Middle River Street "},
 {"Grand Forks, ND 58201"},

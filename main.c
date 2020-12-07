@@ -43,7 +43,7 @@ hashtable *htab;
 // private operations
 //******************************************************************************
 
-static void print_address(address *addr) {
+static void print_address(uint thread_index, int key, address *addr) {
     if (!addr) {
         printf("address passed is NULL\n");
         return;
@@ -51,17 +51,13 @@ static void print_address(address *addr) {
     /* We use sprintf + write instead of printf. Helgrind reports data-races for the latter */
     char buffer[75];
     int stdout = 1;
-    int char_count = sprintf(buffer, "address:  %s\n", addr->street_name);
+    int char_count = sprintf(buffer, "thread: %u key: %d: address:  %s\n", thread_index, key, addr->street_name);
     write(stdout, buffer, char_count);
 }
 
 
 void *small_hashtable_operations(void *arg) {
     bool status;
-    /* address addrs[11] = {{232, "Maroneal Street"}, {705, "LBS Road"}, {402, "Kensington SEZ"},
-                    {0, "MGLR"},{0, "JVLR"}, {489, "E. Edgefield Street"}, {839, "NW. Mountainview St"},
-                    {298, "Cambridge Lane"}, {8166, "John Road"}, {88, "Brickyard Rd"},
-                    {180, "Pleasant Dr."}}; */
 
     uint t_index = pthread_self();
     int index = *(int*)arg;
@@ -71,14 +67,13 @@ void *small_hashtable_operations(void *arg) {
     t_key key = index;
     val_t val = (void*)&addrs[index];
     status = map_insert(htab, key, val);
-
     address *result_val = (address*) map_search(htab, index);
-    print_address(result_val);
+    print_address(t_index, key, result_val);
 
     status = map_delete(htab, key);
 
     result_val = (address*) map_search(htab, key);
-    print_address(result_val);
+    print_address(t_index, key, result_val);
 }
 
 
@@ -94,12 +89,12 @@ void *hashtable_operations(void *arg) {
         status = map_insert(htab, key, val);
 
         address *result_val = (address*) map_search(htab, key);
-        print_address(result_val);
+        /* print_address(key, result_val);
 
         status = map_delete(htab, key);
 
         result_val = (address*) map_search(htab, key);
-        print_address(result_val);   
+        print_address(key, result_val);    */
     }
 }
 
@@ -113,10 +108,10 @@ int main () {
     htab = hashtable_initialize();
 
     pthread_t thr;
-    int indices[11] = {0, 1, 2, 3, 4, 5, 6, 7 ,8, 9, 10};
-    for (int i = 0; i < 11; i++) {
-        pthread_create(&thr, NULL, small_hashtable_operations, &indices[i]);
-        ANNOTATE_HAPPENS_BEFORE(indices[i]);
+    for (int i = 0; i < 10; i++) {
+        int *index = malloc(sizeof(int) * 1);
+        *index = i;
+        pthread_create(&thr, NULL, small_hashtable_operations, index);
     }
     pthread_join(thr, NULL);
 

@@ -36,6 +36,12 @@ void hashtable_destroy
 );
 
 
+void print_hashtable
+(
+    hashtable *htab
+);
+
+
 bool map_insert
 (
     hashtable *htab,

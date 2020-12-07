@@ -114,11 +114,13 @@ int main () {
 
     pthread_t thr;
     int indices[11] = {0, 1, 2, 3, 4, 5, 6, 7 ,8, 9, 10};
-    for (int i = 0; i < 5; i++) {
-        pthread_create(&thr, NULL, hashtable_operations, &i);
+    for (int i = 0; i < 11; i++) {
+        pthread_create(&thr, NULL, small_hashtable_operations, &indices[i]);
         ANNOTATE_HAPPENS_BEFORE(indices[i]);
     }
     pthread_join(thr, NULL);
+
+    print_hashtable(htab);
     
     hashtable_destroy(htab);
 }

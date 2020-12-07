@@ -16,6 +16,7 @@
 #include <stdlib.h>     // NULL
 #include <string.h>     // memcpy
 #include <assert.h>     // assert
+#include <unistd.h>     // write
 
 
 
@@ -161,7 +162,7 @@ static MarkPtrType initialize_bucket(hashtable *htab, uint bucket) {
     dummy->key = bucket;
     dummy->isDummy = true;
     dummy->sol_obj_ref = sol_obj;
-    atomic_init(&dummy->next, NULL);
+    dummy->next = NULL;
     ANNOTATE_HAPPENS_BEFORE(dummy);
     // do we need to save the hash inside the node?
 
@@ -400,7 +401,7 @@ hashtable* hashtable_initialize () {
     start_node->key = start_key;
     start_node->isDummy = true;
     start_node->sol_obj_ref = sol_obj;
-    // atomic_init(&start_node->next, NULL);
+    start_node->next = NULL;
     set_bucket(htab, start_key, start_node);
 
     return htab;
@@ -415,8 +416,30 @@ void hashtable_destroy(hashtable *htab) {
 }
 
 
+void print_hashtable(hashtable *htab) {
+    char buffer[275];
+    int stdout = 1;
+    int char_count;
+
+    NodeType *node = atomic_load(&htab->ST)[0][0];
+    while (node) {
+        if (node->isDummy) {
+            char_count = sprintf(buffer, "dummy(%d) -> ", node->key);
+            write(stdout, buffer, char_count);
+        } else {
+            char_count = sprintf(buffer, "%d -> ", node->key);
+            write(stdout, buffer, char_count);
+        }
+        node = node->next;
+    }
+    char_count = sprintf(buffer, "NULL\n");
+    write(stdout, buffer, char_count);
+}
+
+
 bool map_insert(hashtable *htab, t_key key, val_t val) {
     debug_print("map_insert: %u\n", key);
+
     uint bucket = key % atomic_load(&htab->size);
 
     // intialize bucket if not already done
@@ -434,7 +457,7 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
     node->val = val;
     node->isDummy = false;
     node->sol_obj_ref = sol_obj;
-    atomic_init(&node->next, NULL);
+    node->next = NULL;
     
     // do we need to save the hash inside the node?
 
@@ -443,6 +466,7 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
         free(node);     // no issues with calling free() here, right?
         return false;
     }
+    // print_hashtable(htab);
 
     // if insertion is succesful, increment the count of nodes.
     // If the load factor of the hashtable > MAX_LOAD, resize the hash table

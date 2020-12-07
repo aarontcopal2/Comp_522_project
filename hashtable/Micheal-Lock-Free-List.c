@@ -219,7 +219,7 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
                 goto done;
             }
             // cur->next will contain pointer to next node. Its last bit will denote if cur is marked for deletion.
-            cn = atomic_load(&cur->next);
+            cn = cur->next;
             next = get_node(cn);
             cmark = get_mask_bit(cn);
             so_key_t ckey = cur->so_key;
@@ -232,7 +232,7 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
                 if (ckey >= so_key) {
                     goto done;
                 }
-                prev = &cn; // CHANGE: get_node(cur)->next; why does commented code work in paper and Kumpera?
+                prev = &(cur->next); // CHANGE: get_node(cur)->next; why does commented code work in paper and Kumpera?
                 set_hazard_pointer(htab, cur, 2);
             } else {
                 MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
@@ -279,7 +279,7 @@ splay_t* splay_node(uint64_t key) {
 
 static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
     // stage1: Scan hp_head list and insert all non-null nodes to private hashtable phtable
-    printf("local_scan_for_reclaimable_nodes\n");
+    /* printf("local_scan_for_reclaimable_nodes\n");
     hazard_ptr_node *hp_ref = hp_head;
     while (hp_ref && atomic_load(&hp_ref->hp)) {
         NodeType *n = atomic_load(&hp_ref->hp);
@@ -300,10 +300,10 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
             sol_ht_free(parent_obj);
             /* what do we do with nodes that are safe for reclamation? We can push such nodes to 
             * another private list of free nodes. Each thread will first check if it has elements
-            * in its free-list before mallocing */
+            * in its free-list before mallocing ///
         }
         retired_list_ref = atomic_load(&retired_list_ref->next);
-    }
+    } */
 }
 
 
@@ -328,7 +328,7 @@ void retire_node(hashtable *htab, NodeType *node) {
     * what is omega(H)? Shouldnt RETIRE_THRESHOLD < H and not >= H? 
     * RETIRE_THRESHOLD should be small so that unneeded nodes are removed on regular basis
     * large threshold values will cause problems in case of idle threads */
-    uint RETIRE_THRESHOLD = atomic_load(&htab->hazard_pointers_count) + 10;
+    /* uint RETIRE_THRESHOLD = atomic_load(&htab->hazard_pointers_count) + 10;
 
     // can we safely change the next pointer of node to null?
     atomic_store(&node->next, NULL);
@@ -342,7 +342,7 @@ void retire_node(hashtable *htab, NodeType *node) {
     if (retired_node_count >= RETIRE_THRESHOLD) {
         local_scan_for_reclaimable_nodes(atomic_load(&htab->hp_head));
         global_scan_for_reclaimable_nodes();
-    }
+    } */
 }
 
 
@@ -371,7 +371,7 @@ bool list_insert(hashtable *htab, MarkPtrType *head, NodeType *node) {
         // since we are calling find, we are inserting the element in a sorted order in the list
         // sort order is based on split-order i.e reversed bits
         // creating a link from node->cur and prev->node (while removing prev->cur)
-        atomic_store(&node->next, create_mark_pointer(get_node(cur), 0));
+        node->next = create_mark_pointer(get_node(cur), 0);
 
         MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
         MarkPtrType desired = create_mark_pointer(node, 0);
@@ -409,7 +409,11 @@ bool list_delete(hashtable *htab, MarkPtrType *head, so_key_t key) {
         MarkPtrType expected = create_mark_pointer(next, 0);
 
         // if expected matches, set cur marked for deletion
-        if (!atomic_compare_exchange_strong(&(cur->next), &expected, create_mark_pointer(next, 1))) {
+        /* if (!atomic_compare_exchange_strong(&(cur->next), &expected, create_mark_pointer(next, 1))) {
+            continue;
+        } */
+        if (cur->next != expected) {
+            cur->next = create_mark_pointer(next, 1);
             continue;
         }
 

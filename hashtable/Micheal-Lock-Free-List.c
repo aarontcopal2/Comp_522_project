@@ -389,13 +389,10 @@ bool list_insert(hashtable *htab, MarkPtrType *head, NodeType *node) {
 
 bool list_delete(hashtable *htab, MarkPtrType *head, so_key_t key) {
     bool result;
-    MarkPtrType cur, next;
-    _Atomic (MarkPtrType*) out_prev;
-    atomic_init(&out_prev, NULL);
-    MarkPtrType *tmp_out_prev = atomic_load(&out_prev);
+    MarkPtrType cur, next, *out_prev;
 
     while (true) {
-        cur = list_find(htab, head, key, &tmp_out_prev);
+        cur = list_find(htab, head, key, &out_prev);
         if (!cur || cur->so_key != key) {
             result = false;
             break;
@@ -421,10 +418,11 @@ bool list_delete(hashtable *htab, MarkPtrType *head, so_key_t key) {
         expected = create_mark_pointer(cur, 0);
 
         // if expected matches, make prev point to next
-        if (atomic_compare_exchange_strong(&out_prev, &expected, create_mark_pointer(next, 0))) {
+        if (*out_prev == expected) {
+            *out_prev = create_mark_pointer(next, 0);
             retire_node(htab, cur);
         } else {
-            list_find(htab, head, key, &tmp_out_prev); // Note: Kumpera implementation commented this
+            list_find(htab, head, key, &out_prev); // Note: Kumpera implementation commented this
         }
         result = true;
         break;

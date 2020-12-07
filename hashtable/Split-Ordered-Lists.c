@@ -33,8 +33,8 @@
 //******************************************************************************
 
 #define INITIAL_SEGMENTS 2
-#define SEGMENT_SIZE 5          // is SEGMENT_SIZE = 5 ok?
-#define MAX_LOAD 5              // is an average load of (5 nodes/bucket) fine?
+#define SEGMENT_SIZE 2          // is SEGMENT_SIZE = 5 ok?
+#define MAX_LOAD 2              // is an average load of (5 nodes/bucket) fine?
 
 
 #define NON_BLOCKING 0
@@ -190,12 +190,12 @@ static MarkPtrType initialize_bucket(hashtable *htab, uint bucket) {
 }
 
 
-static uint64_t fetch_and_increment_count(hashtable *htab) {
+static size_t fetch_and_increment_count(hashtable *htab) {
     return atomic_fetch_add(&htab->count, 1);
 }
 
 
-static uint64_t fetch_and_decrement_count(hashtable *htab) {
+static size_t fetch_and_decrement_count(hashtable *htab) {
     return atomic_fetch_add(&htab->count, -1);
 }
 
@@ -299,9 +299,13 @@ static void resize_primary(hashtable *htab) {
     atomic_store(&htab->old_size, old_size);
     atomic_store(&htab->old_ST, atomic_load(&htab->ST));
     atomic_store(&htab->size, old_size * 2);
+    size_t size = atomic_load(&htab->size);
 
     // malloc new table. dont we need a malloc for the 2nd dimension?
-    segment_t *ST = malloc(sizeof(segment_t) * atomic_load(&htab->size));
+    segment_t *ST = malloc(sizeof(segment_t) * size);
+    for (int i = 0; i < size; i++) {
+        ST[i] = (MarkPtrType*)malloc(SEGMENT_SIZE * sizeof(MarkPtrType*));
+    }
     atomic_store(&htab->ST, ST);
     assert(atomic_load(&htab->ST));
 
@@ -327,8 +331,12 @@ static void resize_primary(hashtable *htab) {
     atomic_store(&htab->num_moved_blocks, 0);
 
     // freeing old table
-    free(atomic_load(&htab->old_ST));
-    // free child segments?
+    segment_t *old_ST = atomic_load(&htab->old_ST);
+    // free child segments first
+    for (int i = 0; i < old_size; i++) {
+        // free(old_ST[i]);
+    }
+    free(old_ST);
 
     // change state from cleaning to no_resizing
     resize_state = atomic_fetch_xor(&htab->resizing_state, CLEANING ^ NO_RESIZING);
@@ -351,8 +359,6 @@ static void resize_hashtable(hashtable *htab) {
     if (resizing_state == 0 &&
         atomic_compare_exchange_strong(&htab->resizing_state, &resizing_state, ALLOCATING_MEMORY)) {
         // Primary thread
-        pthread_rwlock_unlock(&htab->resize_rwl);
-
         pthread_rwlock_wrlock(&htab->resize_rwl);
         resize_primary(htab);
         pthread_rwlock_unlock(&htab->resize_rwl);
@@ -386,9 +392,11 @@ hashtable* hashtable_initialize () {
     atomic_init(&htab->hazard_pointers_count, 0);
 
     segment_t *ST = malloc(sizeof(segment_t) * INITIAL_SEGMENTS);
-    ST[0] = (MarkPtrType*)malloc(SEGMENT_SIZE * sizeof(MarkPtrType*));
-    for (int i = 0; i < SEGMENT_SIZE; i++) {
-        ST[0][i] = NULL;
+    for (int i = 0; i < INITIAL_SEGMENTS; i++) {
+        ST[i] = (MarkPtrType*)malloc(SEGMENT_SIZE * sizeof(MarkPtrType*));
+        for (int j = 0; j < SEGMENT_SIZE; j++) {
+            ST[i][j] = NULL;
+        }
     }
     atomic_init(&htab->ST, ST);
     // adding a dummy node for key = 0. Without this node, intialize bucket calls to bucket=0 will be stuck in an infinite loop
@@ -409,8 +417,8 @@ hashtable* hashtable_initialize () {
 
 
 void hashtable_destroy(hashtable *htab) {
+    // free child segments first
     free(atomic_load(&htab->ST));
-    // free child segments?
     pthread_rwlock_destroy(&htab->resize_rwl);
     // free hazard pointers and related data-structures
 }
@@ -463,14 +471,18 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
 
     // list_insert will fail if the key already exists
     if (!list_insert(htab, &bucket_ptr, node)) {
-        free(node);     // no issues with calling free() here, right?
+        retire_node(htab, node);     // no issues with calling free() here, right?
         return false;
     }
     // print_hashtable(htab);
 
     // if insertion is succesful, increment the count of nodes.
     // If the load factor of the hashtable > MAX_LOAD, resize the hash table
-    if (fetch_and_increment_count(htab) / (atomic_load(&htab->size) * SEGMENT_SIZE) > MAX_LOAD) {
+    
+    size_t count = fetch_and_increment_count(htab);
+    size_t size = atomic_load(&htab->size);
+    size_t load =  count / (size * SEGMENT_SIZE);
+    if (load > MAX_LOAD) {
         resize_hashtable(htab);
     }
     return true;

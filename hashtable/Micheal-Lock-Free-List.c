@@ -127,10 +127,10 @@ static hazard_ptr_node* get_thread_hazard_pointers(hashtable *htab) {
         * if that is possible, we need not always malloc */
         hazard_ptr_node *hp;
         ANNOTATE_HAPPENS_BEFORE(hp);
-        //hp = malloc(sizeof(hazard_ptr_node) * 3);
-        sol_ht_object_t *sol_obj = sol_ht_malloc();
-        hp = &(sol_obj->details.hpn);
-        hp->sol_obj_ref = sol_obj;
+        hp = malloc(sizeof(hazard_ptr_node) * 3);
+        // sol_ht_object_t *sol_obj = sol_ht_malloc();
+        // hp = sol_obj->details.hpn;
+        // hp->sol_obj_ref = sol_obj;
 
         atomic_store(&hp[0].next, &hp[1]);
         atomic_store(&hp[1].next, &hp[2]);
@@ -279,13 +279,21 @@ splay_t* splay_node(uint64_t key) {
 
 static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
     // stage1: Scan hp_head list and insert all non-null nodes to private hashtable phtable
-    /* printf("local_scan_for_reclaimable_nodes\n");
+    printf("local_scan_for_reclaimable_nodes\n");
     hazard_ptr_node *hp_ref = hp_head;
-    while (hp_ref && atomic_load(&hp_ref->hp)) {
+    while (hp_ref) {
+        if (atomic_load(&hp_ref->hp) == NULL) {
+            hp_ref = atomic_load(&hp_ref->next);
+            continue;
+        }
         NodeType *n = atomic_load(&hp_ref->hp);
         splay_t *node = splay_node((uint64_t)n);
         st_insert(&private_ht_root, node);
         free(node);
+  
+        if (!atomic_load(&hp_ref->next)) {
+            break;
+        }
         hp_ref = atomic_load(&hp_ref->next);
     }
 
@@ -300,10 +308,10 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
             sol_ht_free(parent_obj);
             /* what do we do with nodes that are safe for reclamation? We can push such nodes to 
             * another private list of free nodes. Each thread will first check if it has elements
-            * in its free-list before mallocing ///
+            * in its free-list before mallocing */
         }
-        retired_list_ref = atomic_load(&retired_list_ref->next);
-    } */
+        retired_list_ref = retired_list_ref->next;
+    }
 }
 
 
@@ -328,13 +336,13 @@ void retire_node(hashtable *htab, NodeType *node) {
     * what is omega(H)? Shouldnt RETIRE_THRESHOLD < H and not >= H? 
     * RETIRE_THRESHOLD should be small so that unneeded nodes are removed on regular basis
     * large threshold values will cause problems in case of idle threads */
-    /* uint RETIRE_THRESHOLD = atomic_load(&htab->hazard_pointers_count) + 10;
+    uint RETIRE_THRESHOLD = atomic_load(&htab->hazard_pointers_count) + 10;
 
     // can we safely change the next pointer of node to null?
-    atomic_store(&node->next, NULL);
+    node->next = NULL;
 
     if (retired_list_head) {
-        atomic_store(&retired_list_head->next, node);
+        retired_list_head->next = node;
     } else {
         retired_list_head = node;
     }
@@ -342,7 +350,7 @@ void retire_node(hashtable *htab, NodeType *node) {
     if (retired_node_count >= RETIRE_THRESHOLD) {
         local_scan_for_reclaimable_nodes(atomic_load(&htab->hp_head));
         global_scan_for_reclaimable_nodes();
-    } */
+    }
 }
 
 
@@ -350,6 +358,10 @@ MarkPtrType list_search(hashtable *htab, MarkPtrType *head, so_key_t key) {
     MarkPtrType *out_prev;
     MarkPtrType node = list_find(htab, head, key, &out_prev);
     clear_hazard_pointers(htab);
+
+    if (node && node->next && get_mask_bit(node->next)) {
+        printf("Node is marked for deletion\n");
+    }
     return node;
 }
 

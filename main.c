@@ -45,7 +45,7 @@ hashtable *htab;
 
 static void print_address(uint thread_index, int key, address *addr) {
     if (!addr) {
-        printf("address passed is NULL\n");
+        printf("thread: %u key: %d: address passed is NULL\n", thread_index, key);
         return;
     }
     /* We use sprintf + write instead of printf. Helgrind reports data-races for the latter */

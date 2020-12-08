@@ -149,13 +149,11 @@ static hazard_ptr_node* get_thread_hazard_pointers(hashtable *htab) {
     if (!local_hp_head) {
         /* how will we recycle/clear pointers for finished threads? 
         * if that is possible, we need not always malloc */
-        hazard_ptr_node *hp;
-        //ANNOTATE_HAPPENS_BEFORE(hp);
-        hp = malloc(sizeof(hazard_ptr_node) * 3);
         // sol_ht_object_t *sol_obj = sol_ht_malloc();
         // hp = sol_obj->details.hpn;
         // hp->sol_obj_ref = sol_obj;
 
+        hazard_ptr_node *hp = malloc(sizeof(hazard_ptr_node) * 3);
         atomic_store(&hp[0].next, &hp[1]);
         atomic_store(&hp[1].next, &hp[2]);
         local_hp_head = hp;

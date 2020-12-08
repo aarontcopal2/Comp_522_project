@@ -112,6 +112,14 @@ struct __hp_node {
 };
 
 
+typedef struct __rl_node retired_list_node;
+
+struct __rl_node {
+  NodeType *thread_retired_list_head;
+  _Atomic(retired_list_node*) next;
+};
+
+
 typedef struct sol_ht_object_details_t {
   union {
     hazard_ptr_node hpn;
@@ -150,6 +158,9 @@ typedef struct {
     _Atomic(hazard_ptr_node *) hp_head;
     _Atomic(hazard_ptr_node *) hp_tail;
     _Atomic(uint) hazard_pointers_count;        // initialize to 0
+
+    _Atomic(retired_list_node *) rl_head;
+    _Atomic(retired_list_node *) rl_tail;
 } hashtable;
 
 

@@ -108,26 +108,22 @@ static MarkPtrType get_bucket(hashtable *htab, uint bucket) {
     debug_print("get_bucket: %u\n", bucket);
     uint segment = bucket / SEGMENT_SIZE;
 
+    MarkPtrType *seg = atomic_load(&htab->ST)[segment];
     // bucket not initialized, hence segment is NULL
-    if (atomic_load(&htab->ST)[segment] == NULL) {
+    if (seg == NULL) {
         return NULL;
     }
-    return atomic_load(&htab->ST)[segment][bucket % SEGMENT_SIZE];
-    ANNOTATE_HAPPENS_AFTER(atomic_load(&htab->ST)[segment][bucket % SEGMENT_SIZE]);     // get_bucket is always called after set_bucket
+    return seg[bucket % SEGMENT_SIZE];
+    ANNOTATE_HAPPENS_AFTER(seg[bucket % SEGMENT_SIZE]);     // get_bucket is always called after set_bucket
 }
 
 
 static void set_bucket(hashtable *htab, uint bucket, NodeType *head) {
     debug_print("set_bucket: %u\n", bucket);
     uint segment = bucket / SEGMENT_SIZE;
-    // we may need to set new_segment[i-SEGMENT_SIZE] = NULL
-    MarkPtrType *MK = atomic_load(&htab->ST)[segment];
-    if (!*MK) {
-        MarkPtrType *new_segment = (MarkPtrType*)malloc(sizeof(MarkPtrType)*SEGMENT_SIZE);
-        MK = new_segment;
-    }
-    ANNOTATE_HAPPENS_BEFORE(atomic_load(&htab->ST)[segment][bucket % SEGMENT_SIZE]);
-    atomic_load(&htab->ST)[segment][bucket % SEGMENT_SIZE] = head;
+    MarkPtrType *seg = atomic_load(&htab->ST)[segment];
+    ANNOTATE_HAPPENS_BEFORE(seg[bucket % SEGMENT_SIZE]);
+    seg[bucket % SEGMENT_SIZE] = head;
 }
 
 
@@ -338,7 +334,7 @@ static void resize_primary(hashtable *htab) {
     segment_t *old_ST = atomic_load(&htab->old_ST);
     // free child segments first
     for (int i = 0; i < old_size; i++) {
-        // free(old_ST[i]);
+        free(old_ST[i]);
     }
     free(old_ST);
 
@@ -374,6 +370,41 @@ static void resize_hashtable(hashtable *htab) {
 }
 
 
+static void free_all_nodes(NodeType *start_node) {
+    // There are 2 types of nodes in the LinkedList (regular nodes externally inserted and dummy nodes for internal use)
+    // will free ALL nodes in this function.
+    // To-Do: Think of a parallel free solution.
+    // This function should be called only from hashtable destroy()
+    NodeType *node = start_node, *next;
+
+    while(node) {
+        if (node != NULL && atomic_load(&node->next)) {
+            next = atomic_load(&node->next);
+            free(node);
+            node = next;
+        } else {
+            free(node);
+            break;
+        }
+    }
+}
+
+
+static void free_hazard_pointers(hazard_ptr_node * start_hp, uint hp_count) {
+    // This function should be called only from hashtable destroy()
+    hazard_ptr_node *hp = start_hp, *next;
+
+    while (hp_count != 0) {
+        // hazard pointer is initialized as an array of size 3. The next thread's hazard pointer is thus linked to hp[2].next
+        next = atomic_load(&hp[2].next);
+        free(hp);
+        hp = next;
+        // each hp is an array of size 3
+        hp_count -= 3;
+    }
+}
+
+
 
 //******************************************************************************
 // interface operations
@@ -394,6 +425,8 @@ hashtable* hashtable_initialize () {
     atomic_init(&htab->hp_head, NULL);
     atomic_init(&htab->hp_tail, NULL);
     atomic_init(&htab->hazard_pointers_count, 0);
+    atomic_init(&htab->rl_head, NULL);
+    atomic_init(&htab->rl_tail, NULL);
 
     segment_t *ST = malloc(sizeof(segment_t) * INITIAL_SEGMENTS);
     for (int i = 0; i < INITIAL_SEGMENTS; i++) {
@@ -420,11 +453,45 @@ hashtable* hashtable_initialize () {
 }
 
 
+static void free_retired_nodes(retired_list_node *rl_head) {
+    retired_list_node *rl_ref = rl_head, *next;
+
+    while (rl_ref) {
+        NodeType *thread_rl_head = rl_ref->thread_retired_list_head;
+        free_all_nodes(thread_rl_head);
+        next = atomic_load(&rl_ref->next);
+        free(rl_ref);
+        rl_ref = next;
+    }
+}
+
+
 void hashtable_destroy(hashtable *htab) {
-    // free child segments first
-    free(atomic_load(&htab->ST));
+    segment_t *ST = atomic_load(&htab->ST);
+    size_t size = atomic_load(&htab->size);
+
+    // free dummy and regular nodes
+    NodeType *start_node = ST[0][0];
+    free_all_nodes(start_node);
+
+    // free retired nodes
+    retired_list_node *rl_head = atomic_load(&htab->rl_head);
+    // free_retired_nodes(rl_head);
+
+    // free hazard pointers
+    hazard_ptr_node *start_hp = atomic_load(&htab->hp_head);
+    uint hp_count = atomic_load(&htab->hazard_pointers_count);
+    free_hazard_pointers(start_hp, hp_count);
+    
+    // free child segments
+    for (int i = 0; i < size; i++) {
+        free(ST[i]);
+    }
+
+    // free segment array
+    free(ST);
     pthread_rwlock_destroy(&htab->resize_rwl);
-    // free hazard pointers and related data-structures
+    free(htab);
 }
 
 

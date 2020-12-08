@@ -87,8 +87,9 @@ __thread hazard_ptr_node *local_hp_head;
 
 
 // variables for SMR
-__thread NodeType *retired_list_head;
-__thread uint retired_node_count = 0;
+__thread NodeType *local_retired_list_head;
+__thread NodeType *local_retired_list_tail;
+__thread uint local_retired_node_count = 0;
 
 
 __thread splay_t *private_ht_root = 0;
@@ -123,6 +124,27 @@ static bool is_node_deleted(MarkPtrType m_ptr) {
 }
 
 
+static void update_global_hazard_pointer_list(hashtable *htab, hazard_ptr_node *local_hp_head) {
+    hazard_ptr_node *null_hp = NULL;
+
+    if (atomic_compare_exchange_strong(&htab->hp_head, &null_hp, local_hp_head)) {
+        atomic_compare_exchange_strong(&htab->hp_tail, &null_hp, &local_hp_head[2]);
+    } else {
+        try_again: ;
+        hazard_ptr_node *current_tail = atomic_load(&htab->hp_tail);
+        if (current_tail == NULL) {
+            goto try_again;
+        }
+        if(atomic_compare_exchange_strong(&htab->hp_tail, current_tail, &local_hp_head[2])) {
+            atomic_store(&current_tail->next, local_hp_head);
+        } else {
+            goto try_again;
+        }
+    }
+    atomic_fetch_add(&htab->hazard_pointers_count, 3);
+}
+
+
 static hazard_ptr_node* get_thread_hazard_pointers(hashtable *htab) {
     if (!local_hp_head) {
         /* how will we recycle/clear pointers for finished threads? 
@@ -136,25 +158,9 @@ static hazard_ptr_node* get_thread_hazard_pointers(hashtable *htab) {
 
         atomic_store(&hp[0].next, &hp[1]);
         atomic_store(&hp[1].next, &hp[2]);
-        hazard_ptr_node *null_hp = NULL;
         local_hp_head = hp;
 
-
-        if (atomic_compare_exchange_strong(&htab->hp_head, &null_hp, local_hp_head)) {
-            atomic_compare_exchange_strong(&htab->hp_tail, &null_hp, &local_hp_head[2]);
-        } else {
-            try_again: ;
-            hazard_ptr_node *current_tail = atomic_load(&htab->hp_tail);
-            if (current_tail == NULL) {
-                goto try_again;
-            }
-            if(atomic_compare_exchange_strong(&htab->hp_tail, current_tail, &local_hp_head[2])) {
-                atomic_store(&current_tail->next, local_hp_head);
-            } else {
-                goto try_again;
-            }
-        }
-        atomic_fetch_add(&htab->hazard_pointers_count, 3);
+        update_global_hazard_pointer_list(htab, local_hp_head);
     }
     return local_hp_head;
 }
@@ -262,16 +268,6 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
     done:
         *out_prev = prev;
         MarkPtrType result = cur;
-
-        // checking to see if the node that we have fetched is deleted
-        // cur->next will contain pointer to next node. Its last bit will denote if cur is marked for deletion.
-        /* MarkPtrType cur_next_ptr;
-        if (cur && (cur_next_ptr = atomic_load(&cur->next))) { // || get_node(cur) == NULL
-            bool isDeleted = is_node_deleted(cur_next_ptr);
-            if (isDeleted) {
-                result = NULL;
-            }
-        } */
         return result;
 }
 
@@ -304,9 +300,9 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
         hp_ref = atomic_load(&hp_ref->next);
     }
 
-    // stage2: check for all nodes in retired_list_head list to see if its present in phtable
+    // stage2: check for all nodes in local_retired_list_head list to see if its present in phtable
     // if no: node is safe for reclamation/reuse, else do nothing
-    NodeType *retired_list_ref = retired_list_head;
+    NodeType *retired_list_ref = local_retired_list_head;
     while (retired_list_ref) {
         if (st_lookup(&private_ht_root, (uint64_t)retired_list_ref) == NULL) {
             // node can be safely reclaimed
@@ -314,6 +310,7 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
             // sol_ht_object_t *parent_obj = retired_list_ref->sol_obj_ref;
             // sol_ht_free(parent_obj);
             free(retired_list_ref);
+            local_retired_node_count--;
             /* what do we do with nodes that are safe for reclamation? We can push such nodes to 
             * another private list of free nodes. Each thread will first check if it has elements
             * in its free-list before mallocing */
@@ -325,10 +322,30 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
 
 static void global_scan_for_reclaimable_nodes() {
     /* completed/idle threads may leave behind hazard pointer nodes and elements in
-    * their retired_list_head. global_scan_for_reclaimable_nodes should identify such nodes and remove them.
+    * their local_retired_list_head. global_scan_for_reclaimable_nodes should identify such nodes and remove them.
     * 
     * Can we identify a thread is complete and its hazard pointer head, freelist and
     * rlist can be reused */
+}
+
+
+static void update_global_retired_list(hashtable *htab, retired_list_node *local_rl_head) {
+    retired_list_node *null_rl = NULL;
+
+    if (atomic_compare_exchange_strong(&htab->rl_head, &null_rl, local_rl_head)) {
+        atomic_compare_exchange_strong(&htab->rl_tail, &null_rl, local_rl_head);
+    } else {
+        try_again: ;
+        retired_list_node *current_tail = atomic_load(&htab->rl_tail);
+        if (current_tail == NULL) {
+            goto try_again;
+        }
+        if(atomic_compare_exchange_strong(&htab->rl_tail, current_tail, local_rl_head)) {
+            atomic_store(&current_tail->next, local_rl_head);
+        } else {
+            goto try_again;
+        }
+    }
 }
 
 
@@ -349,13 +366,19 @@ void retire_node(hashtable *htab, NodeType *node) {
     // can we safely change the next pointer of node to null?
     atomic_store(&node->next, NULL);
 
-    if (retired_list_head) {
-        atomic_store(&retired_list_head->next, node);
+    if (local_retired_list_head) {
+        atomic_store(&local_retired_list_tail->next, node);
+        local_retired_list_tail = atomic_load(&local_retired_list_tail->next);
     } else {
-        retired_list_head = node;
+        local_retired_list_head = node;
+        local_retired_list_tail = node;
+        retired_list_node *rln = malloc(sizeof(retired_list_node));
+        rln->thread_retired_list_head = local_retired_list_head;
+        update_global_retired_list(htab, rln);
     }
-    retired_node_count++;
-    if (retired_node_count >= RETIRE_THRESHOLD) {
+    local_retired_node_count++;
+
+    if (local_retired_node_count >= RETIRE_THRESHOLD) {
         local_scan_for_reclaimable_nodes(atomic_load(&htab->hp_head));
         global_scan_for_reclaimable_nodes();
     }
@@ -410,7 +433,8 @@ bool list_insert(hashtable *htab, MarkPtrType *head, NodeType *node) {
 
 bool list_delete(hashtable *htab, MarkPtrType *head, so_key_t key) {
     bool result;
-    MarkPtrType cur, next, *prev;
+    MarkPtrType *prev;
+    NodeType *cur, *next;
 
     while (true) {
         cur = list_find(htab, head, key, &prev);

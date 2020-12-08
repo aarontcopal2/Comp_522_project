@@ -109,16 +109,19 @@ void *hashtable_operations(void *arg) {
 int main () {
     htab = hashtable_initialize();
 
-    pthread_t thr[10];
-    for (int i = 0; i < 11; i++) {
-        int *index = malloc(sizeof(int) * 1);
-        *index = i;
-        pthread_create(&thr[i], NULL, small_hashtable_operations, index);
+    int THREADS = 2;
+    pthread_t thr[THREADS];
+    int *index = malloc(sizeof(int) * THREADS);
+
+    for (int i = 0; i < THREADS; i++) {
+        index[i] = i;
+        pthread_create(&thr[i], NULL, small_hashtable_operations, &index[i]);
     }
-    for (int i = 0; i < 11; i++) {
+    for (int i = 0; i < THREADS; i++) {
         pthread_join(thr[i], NULL);
     }
 
+    free(index);
     print_hashtable(htab);
     
     hashtable_destroy(htab);

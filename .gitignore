@@ -8,3 +8,4 @@ main
 # output files
 output
 helgrind_output*
+memcheck_output*

@@ -367,9 +367,10 @@ MarkPtrType list_search(hashtable *htab, MarkPtrType *head, so_key_t key) {
     MarkPtrType node = list_find(htab, head, key, &prev);
     clear_hazard_pointers(htab);
 
-    /* if (node && node->next && get_mask_bit(node->next)) {
-        printf("Node is marked for deletion\n");
-    } */
+    if (node && node->so_key != key) {
+        // if key is not present, we return NULL
+        return NULL;
+    }
     return node;
 }
 

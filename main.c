@@ -70,10 +70,12 @@ void *small_hashtable_operations(void *arg) {
     address *result_val = (address*) map_search(htab, index);
     print_address(t_index, key, result_val);
 
+    //print_hashtable(htab);
     status = map_delete(htab, key);
 
     result_val = (address*) map_search(htab, key);
     print_address(t_index, key, result_val);
+    //print_hashtable(htab);
 }
 
 
@@ -107,13 +109,15 @@ void *hashtable_operations(void *arg) {
 int main () {
     htab = hashtable_initialize();
 
-    pthread_t thr;
-    for (int i = 0; i < 10; i++) {
+    pthread_t thr[10];
+    for (int i = 0; i < 11; i++) {
         int *index = malloc(sizeof(int) * 1);
         *index = i;
-        pthread_create(&thr, NULL, small_hashtable_operations, index);
+        pthread_create(&thr[i], NULL, small_hashtable_operations, index);
     }
-    pthread_join(thr, NULL);
+    for (int i = 0; i < 11; i++) {
+        pthread_join(thr[i], NULL);
+    }
 
     print_hashtable(htab);
     

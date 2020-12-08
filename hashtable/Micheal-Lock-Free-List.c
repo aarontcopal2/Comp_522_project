@@ -30,6 +30,8 @@
     do { if (DEBUG) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)
 
 
+#define atomic_compare_and_swap(t,old,new) __sync_bool_compare_and_swap (t, old, new)
+
 
 //******************************************************************************
 // type definitions
@@ -126,7 +128,7 @@ static hazard_ptr_node* get_thread_hazard_pointers(hashtable *htab) {
         /* how will we recycle/clear pointers for finished threads? 
         * if that is possible, we need not always malloc */
         hazard_ptr_node *hp;
-        ANNOTATE_HAPPENS_BEFORE(hp);
+        //ANNOTATE_HAPPENS_BEFORE(hp);
         hp = malloc(sizeof(hazard_ptr_node) * 3);
         // sol_ht_object_t *sol_obj = sol_ht_malloc();
         // hp = sol_obj->details.hpn;
@@ -139,15 +141,18 @@ static hazard_ptr_node* get_thread_hazard_pointers(hashtable *htab) {
 
 
         if (atomic_compare_exchange_strong(&htab->hp_head, &null_hp, local_hp_head)) {
-            // do we need to check if this returns true?
             atomic_compare_exchange_strong(&htab->hp_tail, &null_hp, &local_hp_head[2]);
         } else {
+            try_again: ;
             hazard_ptr_node *current_tail = atomic_load(&htab->hp_tail);
-            if(atomic_compare_exchange_strong(&(atomic_load(&htab->hp_tail)->next), &null_hp, local_hp_head)) {
-                // do we need to check if this returns true?
-                atomic_compare_exchange_strong(&htab->hp_tail, &current_tail, &local_hp_head[2]);
+            if (current_tail == NULL) {
+                goto try_again;
             }
-            ANNOTATE_HAPPENS_AFTER(local_hp_head);
+            if(atomic_compare_exchange_strong(&htab->hp_tail, current_tail, &local_hp_head[2])) {
+                atomic_store(&current_tail->next, local_hp_head);
+            } else {
+                goto try_again;
+            }
         }
         atomic_fetch_add(&htab->hazard_pointers_count, 3);
     }
@@ -219,7 +224,7 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
                 goto done;
             }
             // cur->next will contain pointer to next node. Its last bit will denote if cur is marked for deletion.
-            cn = cur->next;
+            cn = atomic_load(&cur->next);
             next = get_node(cn);
             cmark = get_mask_bit(cn);
             so_key_t ckey = cur->so_key;
@@ -232,7 +237,8 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
                 if (ckey >= so_key) {
                     goto done;
                 }
-                prev = &(cur->next); // CHANGE: get_node(cur)->next; why does commented code work in paper and Kumpera?
+                prev = &get_node(cur)->next;
+                // prev = &cn; 
                 set_hazard_pointer(htab, cur, 2);
             } else {
                 MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
@@ -240,9 +246,10 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
                 /* if (atomic_compare_exchange_strong(prev, expected, desired)) {
                 * not sure: rationale.  prev is a local variable(or thread variable in paper).
                 * I dont see why CAS is needed */
-                // if (atomic_compare_exchange_strong(&prev, expected, desired)) {
-                 if (*prev == expected) {
-                    prev = &desired;
+               /* if (*prev == expected) {
+                    *prev = desired; */
+                if (atomic_compare_and_swap(prev, expected, desired)) {
+                    //HA 
                     retire_node(htab, cur);
                 } else {
                     goto try_again;
@@ -304,13 +311,14 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
         if (st_lookup(&private_ht_root, (uint64_t)retired_list_ref) == NULL) {
             // node can be safely reclaimed
 
-            sol_ht_object_t *parent_obj = retired_list_ref->sol_obj_ref;
-            sol_ht_free(parent_obj);
+            // sol_ht_object_t *parent_obj = retired_list_ref->sol_obj_ref;
+            // sol_ht_free(parent_obj);
+            free(retired_list_ref);
             /* what do we do with nodes that are safe for reclamation? We can push such nodes to 
             * another private list of free nodes. Each thread will first check if it has elements
             * in its free-list before mallocing */
         }
-        retired_list_ref = retired_list_ref->next;
+        retired_list_ref = atomic_load(&retired_list_ref->next);
     }
 }
 
@@ -339,10 +347,10 @@ void retire_node(hashtable *htab, NodeType *node) {
     uint RETIRE_THRESHOLD = atomic_load(&htab->hazard_pointers_count) + 10;
 
     // can we safely change the next pointer of node to null?
-    node->next = NULL;
+    atomic_store(&node->next, NULL);
 
     if (retired_list_head) {
-        retired_list_head->next = node;
+        atomic_store(&retired_list_head->next, node);
     } else {
         retired_list_head = node;
     }
@@ -355,13 +363,13 @@ void retire_node(hashtable *htab, NodeType *node) {
 
 
 MarkPtrType list_search(hashtable *htab, MarkPtrType *head, so_key_t key) {
-    MarkPtrType *out_prev;
-    MarkPtrType node = list_find(htab, head, key, &out_prev);
+    MarkPtrType *prev;
+    MarkPtrType node = list_find(htab, head, key, &prev);
     clear_hazard_pointers(htab);
 
-    if (node && node->next && get_mask_bit(node->next)) {
+    /* if (node && node->next && get_mask_bit(node->next)) {
         printf("Node is marked for deletion\n");
-    }
+    } */
     return node;
 }
 
@@ -369,11 +377,11 @@ MarkPtrType list_search(hashtable *htab, MarkPtrType *head, so_key_t key) {
 bool list_insert(hashtable *htab, MarkPtrType *head, NodeType *node) {
     debug_print("list_insert: %p\n", node);
     bool result;
-    MarkPtrType cur, *out_prev;
+    MarkPtrType cur, *prev;
     so_key_t so_key = node->so_key;
 
     while (true) {
-        cur = list_find(htab, head, so_key, &out_prev);
+        cur = list_find(htab, head, so_key, &prev);
         if (cur && cur->so_key == so_key) {
             // if a key is already present, we return
             result = false;
@@ -383,13 +391,13 @@ bool list_insert(hashtable *htab, MarkPtrType *head, NodeType *node) {
         // since we are calling find, we are inserting the element in a sorted order in the list
         // sort order is based on split-order i.e reversed bits
         // creating a link from node->cur and prev->node (while removing prev->cur)
-        node->next = create_mark_pointer(get_node(cur), 0);
+        atomic_store(&node->next, create_mark_pointer(get_node(cur), 0));
 
         MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
         MarkPtrType desired = create_mark_pointer(node, 0);
-        // if (atomic_compare_exchange_strong(&prev, &expected, create_mark_pointer(node, 0))) {
-        if (*out_prev == expected) {
-            *out_prev = desired;        // CHECK
+        // if (*prev == expected) {
+        // HB
+        if (atomic_compare_and_swap(prev, expected, desired)) {
             result = true;
             break;
         }
@@ -401,10 +409,10 @@ bool list_insert(hashtable *htab, MarkPtrType *head, NodeType *node) {
 
 bool list_delete(hashtable *htab, MarkPtrType *head, so_key_t key) {
     bool result;
-    MarkPtrType cur, next, *out_prev;
+    MarkPtrType cur, next, *prev;
 
     while (true) {
-        cur = list_find(htab, head, key, &out_prev);
+        cur = list_find(htab, head, key, &prev);
         if (!cur || cur->so_key != key) {
             result = false;
             break;
@@ -416,25 +424,25 @@ bool list_delete(hashtable *htab, MarkPtrType *head, so_key_t key) {
 
         // expected: cur points to next and cur is not marked for deletion
         MarkPtrType expected = create_mark_pointer(next, 0);
+        MarkPtrType desired = create_mark_pointer(next, 1);
 
         // if expected matches, set cur marked for deletion
-        /* if (!atomic_compare_exchange_strong(&(cur->next), &expected, create_mark_pointer(next, 1))) {
-            continue;
-        } */
-        if (cur->next != expected) {
-            cur->next = create_mark_pointer(next, 1);
+        if (!atomic_compare_exchange_strong(&cur->next, &expected, desired)) {
             continue;
         }
+        /* if (cur->next != expected) {
+            atomic_store(&cur->next, create_mark_pointer(next, 1));
+            continue;
+        } */
 
         // expected: prev points to cur and prev is not marked for deletion
         expected = create_mark_pointer(cur, 0);
-
+        desired = create_mark_pointer(next, 0);
         // if expected matches, make prev point to next
-        if (*out_prev == expected) {
-            *out_prev = create_mark_pointer(next, 0);
+        if (atomic_compare_and_swap(prev, expected, desired)) {
             retire_node(htab, cur);
         } else {
-            list_find(htab, head, key, &out_prev); // Note: Kumpera implementation commented this
+            list_find(htab, head, key, &prev); // Note: Kumpera implementation commented this
         }
         result = true;
         break;

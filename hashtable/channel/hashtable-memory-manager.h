@@ -93,7 +93,7 @@ struct __node {
     val_t val;
     bool isDummy;
     sol_ht_object_t *sol_obj_ref;
-    MarkPtrType next;
+    _Atomic(MarkPtrType) next;
 };
 
 

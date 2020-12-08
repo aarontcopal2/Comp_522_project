@@ -112,8 +112,8 @@ static MarkPtrType get_bucket(hashtable *htab, uint bucket) {
     if (atomic_load(&htab->ST)[segment] == NULL) {
         return NULL;
     }
-    //ANNOTATE_HAPPENS_AFTER(htab->ST);     // get_bucket is always called after set_bucket
     return atomic_load(&htab->ST)[segment][bucket % SEGMENT_SIZE];
+    ANNOTATE_HAPPENS_AFTER(atomic_load(&htab->ST)[segment][bucket % SEGMENT_SIZE]);     // get_bucket is always called after set_bucket
 }
 
 
@@ -126,8 +126,7 @@ static void set_bucket(hashtable *htab, uint bucket, NodeType *head) {
         MarkPtrType *new_segment = (MarkPtrType*)malloc(sizeof(MarkPtrType)*SEGMENT_SIZE);
         MK = new_segment;
     }
-    //ANNOTATE_HAPPENS_BEFORE(htab->ST);
-    MarkPtrType null_mptr = NULL;
+    ANNOTATE_HAPPENS_BEFORE(atomic_load(&htab->ST)[segment][bucket % SEGMENT_SIZE]);
     atomic_load(&htab->ST)[segment][bucket % SEGMENT_SIZE] = head;
 }
 
@@ -150,20 +149,25 @@ static MarkPtrType initialize_bucket(hashtable *htab, uint bucket) {
 
     MarkPtrType cur;
     uint parent = get_parent(bucket);
+
+    try_again: ;
     MarkPtrType parent_bucket_ptr = get_bucket(htab, parent);
     if (parent_bucket_ptr == NULL) {
         parent_bucket_ptr = initialize_bucket(htab, parent);
+        if (parent_bucket_ptr == NULL) {
+            goto try_again;
+        }
     }
 
-    // NodeType *dummy = malloc(sizeof(NodeType));
-    sol_ht_object_t *sol_obj = sol_ht_malloc();
-    NodeType *dummy = &(sol_obj->details.node);
+    NodeType *dummy = malloc(sizeof(NodeType));
+    /* sol_ht_object_t *sol_obj = sol_ht_malloc();
+    NodeType *dummy = &(sol_obj->details.node); */
     dummy->so_key = so_dummy_key(bucket);      // is this param correct?
     dummy->key = bucket;
     dummy->isDummy = true;
-    dummy->sol_obj_ref = sol_obj;
-    dummy->next = NULL;
-    ANNOTATE_HAPPENS_BEFORE(dummy);
+    // dummy->sol_obj_ref = sol_obj;
+    atomic_init(&dummy->next, NULL);
+    // ANNOTATE_HAPPENS_BEFORE(dummy);
     // do we need to save the hash inside the node?
 
     /* if another thread began initialization of the same bucket, and completed before current thread, then dummy insertion will fail
@@ -179,7 +183,7 @@ static MarkPtrType initialize_bucket(hashtable *htab, uint bucket) {
     if (!list_insert(htab, &parent_bucket_ptr, dummy)) {
         cur = list_search(htab, &parent_bucket_ptr, so_dummy_key(bucket));
         retire_node(htab, dummy);
-        dummy = cur;
+        return NULL;
     }
     set_bucket(htab, bucket, dummy);
     /* we call get_bucket again rather than returning from set_bucket because some other thread may have called set_bucket and updated
@@ -402,14 +406,14 @@ hashtable* hashtable_initialize () {
     // adding a dummy node for key = 0. Without this node, intialize bucket calls to bucket=0 will be stuck in an infinite loop
     t_key start_key = 0;
 
-    // NodeType *start_node = malloc(sizeof(NodeType));
-    sol_ht_object_t *sol_obj = sol_ht_malloc();
-    NodeType *start_node = &(sol_obj->details.node);
+    NodeType *start_node = malloc(sizeof(NodeType));
+    /* sol_ht_object_t *sol_obj = sol_ht_malloc();
+    NodeType *start_node = &(sol_obj->details.node); */
     start_node->so_key = so_dummy_key(start_key);
     start_node->key = start_key;
     start_node->isDummy = true;
-    start_node->sol_obj_ref = sol_obj;
-    start_node->next = NULL;
+    // start_node->sol_obj_ref = sol_obj;
+    atomic_init(&start_node->next, NULL);
     set_bucket(htab, start_key, start_node);
 
     return htab;
@@ -438,7 +442,7 @@ void print_hashtable(hashtable *htab) {
             char_count = sprintf(buffer, "%d -> ", node->key);
             write(stdout, buffer, char_count);
         }
-        node = node->next;
+        node = atomic_load(&node->next);
     }
     char_count = sprintf(buffer, "NULL\n");
     write(stdout, buffer, char_count);
@@ -451,21 +455,25 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
     uint bucket = key % atomic_load(&htab->size);
 
     // intialize bucket if not already done
+    try_again: ;
     MarkPtrType bucket_ptr = get_bucket(htab, bucket);
     if (!bucket_ptr) {
         bucket_ptr = initialize_bucket(htab, bucket);
+        if (bucket_ptr == NULL) {
+            goto try_again;
+        }
     }
 
     // inside the node, key is stored in split-ordered form
-    // NodeType *node = malloc(sizeof(NodeType));
-    sol_ht_object_t *sol_obj = sol_ht_malloc();
-    NodeType *node = &(sol_obj->details.node);
+    NodeType *node = malloc(sizeof(NodeType));
+    /* sol_ht_object_t *sol_obj = sol_ht_malloc();
+    NodeType *node = &(sol_obj->details.node); */
     node->so_key = so_regular_key(key);
     node->key = key;
     node->val = val;
     node->isDummy = false;
-    node->sol_obj_ref = sol_obj;
-    node->next = NULL;
+    // node->sol_obj_ref = sol_obj;
+    atomic_init(&node->next, NULL);
     
     // do we need to save the hash inside the node?
 
@@ -493,10 +501,14 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
 val_t map_search(hashtable *htab, t_key key) {
     uint bucket = key % atomic_load(&htab->size);
 
-    MarkPtrType bucket_ptr = get_bucket(htab, bucket);
     // ensure that bucket is initialized
+    try_again: ;
+    MarkPtrType bucket_ptr = get_bucket(htab, bucket);
     if (bucket_ptr == NULL) {
         bucket_ptr = initialize_bucket(htab, bucket);
+        if (bucket_ptr == NULL) {
+            goto try_again;
+        }
     }
     MarkPtrType result = list_search(htab, &bucket_ptr, so_regular_key(key));
     if (result && result->val) {
@@ -509,10 +521,14 @@ val_t map_search(hashtable *htab, t_key key) {
 bool map_delete(hashtable *htab, t_key key) {
     uint bucket = key % atomic_load(&htab->size);
 
-    MarkPtrType bucket_ptr = get_bucket(htab, bucket);
     // ensure that bucket is initialized
+    try_again: ;
+    MarkPtrType bucket_ptr = get_bucket(htab, bucket);
     if (bucket_ptr == NULL) {
         bucket_ptr = initialize_bucket(htab, bucket);
+        if (bucket_ptr == NULL) {
+            goto try_again;
+        }
     }
     if (!list_delete(htab, &bucket_ptr, so_regular_key(key))) {
         return false;

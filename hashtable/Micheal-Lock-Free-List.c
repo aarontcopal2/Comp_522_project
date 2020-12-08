@@ -136,6 +136,7 @@ static void update_global_hazard_pointer_list(hashtable *htab, hazard_ptr_node *
             goto try_again;
         }
         if(atomic_compare_exchange_strong(&htab->hp_tail, current_tail, &local_hp_head[2])) {
+            ANNOTATE_HAPPENS_AFTER(current_tail);
             atomic_store(&current_tail->next, local_hp_head);
         } else {
             goto try_again;
@@ -153,7 +154,9 @@ static hazard_ptr_node* get_thread_hazard_pointers(hashtable *htab) {
         // hp = sol_obj->details.hpn;
         // hp->sol_obj_ref = sol_obj;
 
-        hazard_ptr_node *hp = malloc(sizeof(hazard_ptr_node) * 3);
+        hazard_ptr_node *hp;
+        ANNOTATE_HAPPENS_BEFORE(hp);
+        hp = malloc(sizeof(hazard_ptr_node) * 3);
         atomic_store(&hp[0].next, &hp[1]);
         atomic_store(&hp[1].next, &hp[2]);
         local_hp_head = hp;

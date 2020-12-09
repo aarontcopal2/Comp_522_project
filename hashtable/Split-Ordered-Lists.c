@@ -114,7 +114,7 @@ static MarkPtrType get_bucket(hashtable *htab, uint bucket) {
         return NULL;
     }
     return seg[bucket % SEGMENT_SIZE];
-    ANNOTATE_HAPPENS_AFTER(seg[bucket % SEGMENT_SIZE]);     // get_bucket is always called after set_bucket
+    // get_bucket is always called after set_bucket
 }
 
 
@@ -122,7 +122,7 @@ static void set_bucket(hashtable *htab, uint bucket, NodeType *head) {
     debug_print("set_bucket: %u\n", bucket);
     uint segment = bucket / SEGMENT_SIZE;
     MarkPtrType *seg = atomic_load(&htab->ST)[segment];
-    ANNOTATE_HAPPENS_BEFORE(seg[bucket % SEGMENT_SIZE]);
+    ANNOTATE_HAPPENS_AFTER(seg[bucket % SEGMENT_SIZE]);
     seg[bucket % SEGMENT_SIZE] = head;
 }
 
@@ -208,6 +208,9 @@ static void resize_task(hashtable *htab, int blocking) {
     size_t my_block;
     size_t num_finished_blocks = 0;
 
+    segment_t *ST = atomic_load(&htab->ST);
+    segment_t *old_ST = atomic_load(&htab->old_ST);
+
     // initialize blocks
     while ((my_block = atomic_fetch_add(&htab->next_init_block, 1)) < num_new_blocks) {
         size_t block_start = my_block * BLOCK_SIZE;
@@ -218,7 +221,8 @@ static void resize_task(hashtable *htab, int blocking) {
 
         for (int i = block_start; i < block_end; i++) {
             for (int j = 0; j < SEGMENT_SIZE; j++) {
-                atomic_load(&htab->ST)[i][j] = NULL;
+                ST[i][j] = NULL;
+                ANNOTATE_HAPPENS_BEFORE(ST[i][j]);
             }
         }
         num_finished_blocks++;
@@ -241,8 +245,8 @@ static void resize_task(hashtable *htab, int blocking) {
 
         for (int i = block_start; i < block_end; i++) {
             for (int j = 0; j < SEGMENT_SIZE; j++) {
-                MarkPtrType *tmp = atomic_load(&htab->ST)[i];
-                tmp[j] = atomic_load(&htab->old_ST)[i][j];
+                ST[i][j] = old_ST[i][j];
+                ANNOTATE_HAPPENS_BEFORE(ST[i][j]);
             }
         }
         num_finished_blocks++;
@@ -304,9 +308,10 @@ static void resize_primary(hashtable *htab) {
     segment_t *ST = malloc(sizeof(segment_t) * size);
     for (int i = 0; i < size; i++) {
         ST[i] = (MarkPtrType*)malloc(SEGMENT_SIZE * sizeof(MarkPtrType*));
+        ANNOTATE_HAPPENS_BEFORE(ST[i]);
     }
+    assert(ST);
     atomic_store(&htab->ST, ST);
-    assert(atomic_load(&htab->ST));
 
     // change state from allocation to moving data
     size_t resize_state = atomic_fetch_xor(&htab->resizing_state, ALLOCATING_MEMORY ^ MOVING_DATA);       // what was the purpose of XOR? Could we simply store 3?
@@ -523,6 +528,8 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
     }
 
     uint bucket = key % atomic_load(&htab->size);
+    MarkPtrType *seg = atomic_load(&htab->ST)[bucket / SEGMENT_SIZE];
+    ANNOTATE_HAPPENS_AFTER(seg);
 
     // intialize bucket if not already done
     try_again: ;

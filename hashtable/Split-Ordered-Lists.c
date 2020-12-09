@@ -301,7 +301,7 @@ static void resize_primary(hashtable *htab) {
     atomic_store(&htab->size, old_size * 2);
     size_t size = atomic_load(&htab->size);
 
-    // malloc new table. dont we need a malloc for the 2nd dimension?
+    // malloc new table.
     segment_t *ST = malloc(sizeof(segment_t) * size);
     for (int i = 0; i < size; i++) {
         ST[i] = (MarkPtrType*)malloc(SEGMENT_SIZE * sizeof(MarkPtrType*));
@@ -364,7 +364,6 @@ static void resize_hashtable(hashtable *htab) {
         pthread_rwlock_unlock(&htab->resize_rwl);
     } else {
         // Replica(Secondary) thread
-        pthread_rwlock_unlock(&htab->resize_rwl);
         resize_replica(htab);
     }
 }
@@ -519,6 +518,12 @@ void print_hashtable(hashtable *htab) {
 bool map_insert(hashtable *htab, t_key key, val_t val) {
     debug_print("map_insert: %u\n", key);
 
+    // if a resize is in progress(initiated by another thread), block operations and make current thread a resize helper
+    while (pthread_rwlock_tryrdlock(&htab->resize_rwl) != 0) {
+        resize_replica(htab);
+    }
+    pthread_rwlock_unlock(&htab->resize_rwl);
+
     uint bucket = key % atomic_load(&htab->size);
 
     // intialize bucket if not already done
@@ -546,14 +551,13 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
 
     // list_insert will fail if the key already exists
     if (!list_insert(htab, &bucket_ptr, node)) {
-        retire_node(htab, node);     // no issues with calling free() here, right?
+        retire_node(htab, node);
         return false;
     }
     // print_hashtable(htab);
 
     // if insertion is succesful, increment the count of nodes.
     // If the load factor of the hashtable > MAX_LOAD, resize the hash table
-    
     size_t count = fetch_and_increment_count(htab);
     size_t size = atomic_load(&htab->size);
     size_t load =  count / (size * SEGMENT_SIZE);
@@ -566,6 +570,11 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
 
 // need to return value
 val_t map_search(hashtable *htab, t_key key) {
+    // if a resize is in progress(initiated by another thread), block operations and make current thread a resize helper
+    while (pthread_rwlock_tryrdlock(&htab->resize_rwl) != 0) {
+        resize_replica(htab);
+    }
+    pthread_rwlock_unlock(&htab->resize_rwl);
     uint bucket = key % atomic_load(&htab->size);
 
     // ensure that bucket is initialized
@@ -577,6 +586,7 @@ val_t map_search(hashtable *htab, t_key key) {
             goto try_again;
         }
     }
+
     MarkPtrType result = list_search(htab, &bucket_ptr, so_regular_key(key));
     if (result && result->val) {
         return result->val;
@@ -586,6 +596,11 @@ val_t map_search(hashtable *htab, t_key key) {
 
 
 bool map_delete(hashtable *htab, t_key key) {
+    // if a resize is in progress(initiated by another thread), block operations and make current thread a resize helper
+    while (pthread_rwlock_tryrdlock(&htab->resize_rwl) != 0) {
+        resize_replica(htab);
+    }
+    pthread_rwlock_unlock(&htab->resize_rwl);
     uint bucket = key % atomic_load(&htab->size);
 
     // ensure that bucket is initialized

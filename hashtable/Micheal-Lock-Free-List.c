@@ -341,8 +341,10 @@ static void update_global_retired_list(hashtable *htab, retired_list_node *local
             goto try_again;
         }
         if(atomic_compare_exchange_strong(&htab->rl_tail, &current_tail, local_rl_head)) {
+            // adding this helgrind annotation because we are always CAS'ing a NULL pointer
+            VALGRIND_HG_DISABLE_CHECKING(&current_tail->next, sizeof(current_tail->next));
             atomic_store(&current_tail->next, local_rl_head);
-            ANNOTATE_HAPPENS_AFTER(&current_tail->next);
+            VALGRIND_HG_ENABLE_CHECKING(&current_tail->next, sizeof(current_tail->next));
         } else {
             goto try_again;
         }
@@ -375,7 +377,6 @@ void retire_node(hashtable *htab, NodeType *node) {
         local_retired_list_tail = node;
         retired_list_node *rln = malloc(sizeof(retired_list_node));
         rln->thread_retired_list_head = local_retired_list_head;
-        ANNOTATE_HAPPENS_BEFORE(&rln->next);
         update_global_retired_list(htab, rln);
     }
     local_retired_node_count++;

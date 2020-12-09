@@ -521,7 +521,6 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
     while (pthread_rwlock_tryrdlock(&htab->resize_rwl) != 0) {
         resize_replica(htab);
     }
-    pthread_rwlock_unlock(&htab->resize_rwl);
 
     uint bucket = key % atomic_load(&htab->size);
 
@@ -551,10 +550,11 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
     // list_insert will fail if the key already exists
     if (!list_insert(htab, &bucket_ptr, node)) {
         retire_node(htab, node);
+        pthread_rwlock_unlock(&htab->resize_rwl);
         return false;
     }
-    // print_hashtable(htab);
 
+    pthread_rwlock_unlock(&htab->resize_rwl);
     // if insertion is succesful, increment the count of nodes.
     // If the load factor of the hashtable > MAX_LOAD, resize the hash table
     size_t count = fetch_and_increment_count(htab);
@@ -573,7 +573,6 @@ val_t map_search(hashtable *htab, t_key key) {
     while (pthread_rwlock_tryrdlock(&htab->resize_rwl) != 0) {
         resize_replica(htab);
     }
-    pthread_rwlock_unlock(&htab->resize_rwl);
     uint bucket = key % atomic_load(&htab->size);
 
     // ensure that bucket is initialized
@@ -587,6 +586,7 @@ val_t map_search(hashtable *htab, t_key key) {
     }
 
     MarkPtrType result = list_search(htab, &bucket_ptr, so_regular_key(key));
+    pthread_rwlock_unlock(&htab->resize_rwl);
     if (result && result->val) {
         return result->val;
     }
@@ -599,7 +599,6 @@ bool map_delete(hashtable *htab, t_key key) {
     while (pthread_rwlock_tryrdlock(&htab->resize_rwl) != 0) {
         resize_replica(htab);
     }
-    pthread_rwlock_unlock(&htab->resize_rwl);
     uint bucket = key % atomic_load(&htab->size);
 
     // ensure that bucket is initialized
@@ -612,10 +611,12 @@ bool map_delete(hashtable *htab, t_key key) {
         }
     }
     if (!list_delete(htab, &bucket_ptr, so_regular_key(key))) {
+        pthread_rwlock_unlock(&htab->resize_rwl);
         return false;
     }
 
     // if deletion is succesful, decrement the count of nodes.
     fetch_and_decrement_count(htab);
+    pthread_rwlock_unlock(&htab->resize_rwl);
     return true;
 }

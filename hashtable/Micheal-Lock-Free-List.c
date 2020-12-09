@@ -377,6 +377,7 @@ void retire_node(hashtable *htab, NodeType *node) {
         local_retired_list_tail = node;
         retired_list_node *rln = malloc(sizeof(retired_list_node));
         rln->thread_retired_list_head = local_retired_list_head;
+        atomic_store(&rln->next, NULL);
         update_global_retired_list(htab, rln);
     }
     local_retired_node_count++;

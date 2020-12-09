@@ -390,6 +390,19 @@ static void free_all_nodes(NodeType *start_node) {
 }
 
 
+static void free_retired_nodes(retired_list_node *rl_head) {
+    retired_list_node *rl_ref = rl_head, *next;
+
+    while (rl_ref) {
+        NodeType *thread_rl_head = rl_ref->thread_retired_list_head;
+        free_all_nodes(thread_rl_head);
+        next = atomic_load(&rl_ref->next);
+        free(rl_ref);
+        rl_ref = next;
+    }
+}
+
+
 static void free_hazard_pointers(hazard_ptr_node * start_hp, uint hp_count) {
     // This function should be called only from hashtable destroy()
     hazard_ptr_node *hp = start_hp, *next;
@@ -453,19 +466,6 @@ hashtable* hashtable_initialize () {
 }
 
 
-static void free_retired_nodes(retired_list_node *rl_head) {
-    retired_list_node *rl_ref = rl_head, *next;
-
-    while (rl_ref) {
-        NodeType *thread_rl_head = rl_ref->thread_retired_list_head;
-        free_all_nodes(thread_rl_head);
-        next = atomic_load(&rl_ref->next);
-        free(rl_ref);
-        rl_ref = next;
-    }
-}
-
-
 void hashtable_destroy(hashtable *htab) {
     segment_t *ST = atomic_load(&htab->ST);
     size_t size = atomic_load(&htab->size);
@@ -476,7 +476,7 @@ void hashtable_destroy(hashtable *htab) {
 
     // free retired nodes
     retired_list_node *rl_head = atomic_load(&htab->rl_head);
-    // free_retired_nodes(rl_head);
+    free_retired_nodes(rl_head);
 
     // free hazard pointers
     hazard_ptr_node *start_hp = atomic_load(&htab->hp_head);

@@ -135,7 +135,7 @@ static void update_global_hazard_pointer_list(hashtable *htab, hazard_ptr_node *
         if (current_tail == NULL) {
             goto try_again;
         }
-        if(atomic_compare_exchange_strong(&htab->hp_tail, current_tail, &local_hp_head[2])) {
+        if(atomic_compare_exchange_strong(&htab->hp_tail, &current_tail, &local_hp_head[2])) {
             ANNOTATE_HAPPENS_AFTER(current_tail);
             atomic_store(&current_tail->next, local_hp_head);
         } else {
@@ -154,11 +154,10 @@ static hazard_ptr_node* get_thread_hazard_pointers(hashtable *htab) {
         // hp = sol_obj->details.hpn;
         // hp->sol_obj_ref = sol_obj;
 
-        hazard_ptr_node *hp;
-        ANNOTATE_HAPPENS_BEFORE(hp);
-        hp = malloc(sizeof(hazard_ptr_node) * 3);
+        hazard_ptr_node *hp = malloc(sizeof(hazard_ptr_node) * 3);
         atomic_store(&hp[0].next, &hp[1]);
         atomic_store(&hp[1].next, &hp[2]);
+        ANNOTATE_HAPPENS_BEFORE(&hp[2]);
         local_hp_head = hp;
 
         update_global_hazard_pointer_list(htab, local_hp_head);
@@ -341,8 +340,9 @@ static void update_global_retired_list(hashtable *htab, retired_list_node *local
         if (current_tail == NULL) {
             goto try_again;
         }
-        if(atomic_compare_exchange_strong(&htab->rl_tail, current_tail, local_rl_head)) {
+        if(atomic_compare_exchange_strong(&htab->rl_tail, &current_tail, local_rl_head)) {
             atomic_store(&current_tail->next, local_rl_head);
+            ANNOTATE_HAPPENS_AFTER(&current_tail->next);
         } else {
             goto try_again;
         }
@@ -375,6 +375,7 @@ void retire_node(hashtable *htab, NodeType *node) {
         local_retired_list_tail = node;
         retired_list_node *rln = malloc(sizeof(retired_list_node));
         rln->thread_retired_list_head = local_retired_list_head;
+        ANNOTATE_HAPPENS_BEFORE(&rln->next);
         update_global_retired_list(htab, rln);
     }
     local_retired_node_count++;

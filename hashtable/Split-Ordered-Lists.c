@@ -163,7 +163,6 @@ static MarkPtrType initialize_bucket(hashtable *htab, uint bucket) {
     dummy->isDummy = true;
     // dummy->sol_obj_ref = sol_obj;
     atomic_init(&dummy->next, NULL);
-    // ANNOTATE_HAPPENS_BEFORE(dummy);
     // do we need to save the hash inside the node?
 
     /* if another thread began initialization of the same bucket, and completed before current thread, then dummy insertion will fail

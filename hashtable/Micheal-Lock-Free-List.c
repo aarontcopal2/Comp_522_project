@@ -229,6 +229,7 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
             if (cur == NULL) {
                 goto done;
             }
+
             // cur->next will contain pointer to next node. Its last bit will denote if cur is marked for deletion.
             cn = atomic_load(&cur->next);
             next = get_node(cn);
@@ -367,7 +368,9 @@ void retire_node(hashtable *htab, NodeType *node) {
     uint RETIRE_THRESHOLD = atomic_load(&htab->hazard_pointers_count) + 10;
 
     // can we safely change the next pointer of node to null?
+    VALGRIND_HG_DISABLE_CHECKING(&node->next, sizeof(node->next));
     atomic_store(&node->next, NULL);
+    VALGRIND_HG_ENABLE_CHECKING(&node->next, sizeof(node->next));
 
     if (local_retired_list_head) {
         atomic_store(&local_retired_list_tail->next, node);

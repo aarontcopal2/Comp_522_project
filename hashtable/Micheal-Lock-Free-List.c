@@ -261,8 +261,8 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
     hazard_ptr_node *hp_ref = hp_head;
     while (hp_ref) {
         NodeType *hp = atomic_load(&hp_ref->hp);
-        ANNOTATE_HAPPENS_AFTER(&hp_ref->next);
         hazard_ptr_node *next = atomic_load(&hp_ref->next);
+        ANNOTATE_HAPPENS_AFTER(&hp_ref->next);
         // if hazard pointer is NULL, move to next reference
         if (hp == NULL) {
             hp_ref = next;

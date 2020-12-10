@@ -33,13 +33,6 @@
 #define atomic_compare_and_swap(t,old,new) __sync_bool_compare_and_swap (t, old, new)
 
 
-//******************************************************************************
-// type definitions
-//******************************************************************************
-
-// #define atomic_load(p)  ({ typeof(*p) __tmp = *(p); load_barrier (); __tmp; })
-
-
 
 //******************************************************************************
 // hashtable definitions
@@ -137,6 +130,7 @@ static void update_global_hazard_pointer_list(hashtable *htab, hazard_ptr_node *
         }
         if(atomic_compare_exchange_strong(&htab->hp_tail, &current_tail, &local_hp_head[2])) {
             ANNOTATE_HAPPENS_AFTER(current_tail);
+            ANNOTATE_HAPPENS_BEFORE(&current_tail->next);
             atomic_store(&current_tail->next, local_hp_head);
         } else {
             goto try_again;
@@ -175,16 +169,6 @@ static NodeType* get_hazard_pointer(hashtable *htab, int index) {
 
 static void set_hazard_pointer(hashtable *htab, NodeType* node, int index) {
     hazard_ptr_node *hpn = get_thread_hazard_pointers(htab);
-
-    /* setting hp to null because hpn is thread local.
-    * Other threads dont depend on this hazard pointer */
-
-    /*
-    NodeType *null_hp = NULL;
-    hpn[index].hp = null_hp;
-    atomic_compare_exchange_strong(&hpn[index].hp, &null_hp, node);
-    */
-    // no need for atomic CAS for thread local changes
     atomic_store(&hpn[index].hp, node);
 }
 
@@ -221,10 +205,6 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
         pc = *prev;
         cur = get_node(pc);
         pmark = get_mask_bit(pc);
-        /*set_hazard_pointer(cur, 1);
-        if (atomic_load(prev) != create_mark_pointer(get_node(cur), 0)) {
-            goto try_again;
-        }*/
         while(true) {
             if (cur == NULL) {
                 goto done;
@@ -250,13 +230,7 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
             } else {
                 MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
                 MarkPtrType desired = create_mark_pointer(get_node(next), 0);
-                /* if (atomic_compare_exchange_strong(prev, expected, desired)) {
-                * not sure: rationale.  prev is a local variable(or thread variable in paper).
-                * I dont see why CAS is needed */
-               /* if (*prev == expected) {
-                    *prev = desired; */
                 if (atomic_compare_and_swap(prev, expected, desired)) {
-                    //HA 
                     retire_node(htab, cur);
                 } else {
                     goto try_again;
@@ -286,19 +260,22 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
     printf("local_scan_for_reclaimable_nodes\n");
     hazard_ptr_node *hp_ref = hp_head;
     while (hp_ref) {
-        if (atomic_load(&hp_ref->hp) == NULL) {
-            hp_ref = atomic_load(&hp_ref->next);
+        NodeType *hp = atomic_load(&hp_ref->hp);
+        ANNOTATE_HAPPENS_AFTER(&hp_ref->next);
+        hazard_ptr_node *next = atomic_load(&hp_ref->next);
+        // if hazard pointer is NULL, move to next reference
+        if (hp == NULL) {
+            hp_ref = next;
             continue;
         }
-        NodeType *n = atomic_load(&hp_ref->hp);
-        splay_t *node = splay_node((uint64_t)n);
+        splay_t *node = splay_node((uint64_t)hp);
         st_insert(&private_ht_root, node);
         free(node);
   
-        if (!atomic_load(&hp_ref->next)) {
+        if (!next) {
             break;
         }
-        hp_ref = atomic_load(&hp_ref->next);
+        hp_ref = next;
     }
 
     // stage2: check for all nodes in local_retired_list_head list to see if its present in phtable
@@ -343,9 +320,9 @@ static void update_global_retired_list(hashtable *htab, retired_list_node *local
         }
         if(atomic_compare_exchange_strong(&htab->rl_tail, &current_tail, local_rl_head)) {
             // adding this helgrind annotation because we are always CAS'ing a NULL pointer
-            VALGRIND_HG_DISABLE_CHECKING(&current_tail->next, sizeof(current_tail->next));
+            VALGRIND_HG_DISABLE_CHECKING(&current_tail->next, sizeof(retired_list_node));
             atomic_store(&current_tail->next, local_rl_head);
-            VALGRIND_HG_ENABLE_CHECKING(&current_tail->next, sizeof(current_tail->next));
+            VALGRIND_HG_ENABLE_CHECKING(&current_tail->next, sizeof(retired_list_node));
         } else {
             goto try_again;
         }
@@ -368,9 +345,9 @@ void retire_node(hashtable *htab, NodeType *node) {
     uint RETIRE_THRESHOLD = atomic_load(&htab->hazard_pointers_count) + 10;
 
     // can we safely change the next pointer of node to null?
-    VALGRIND_HG_DISABLE_CHECKING(&node->next, sizeof(node->next));
+    VALGRIND_HG_DISABLE_CHECKING(&node->next, sizeof(NodeType));
     atomic_store(&node->next, NULL);
-    VALGRIND_HG_ENABLE_CHECKING(&node->next, sizeof(node->next));
+    VALGRIND_HG_ENABLE_CHECKING(&node->next, sizeof(NodeType));
 
     if (local_retired_list_head) {
         atomic_store(&local_retired_list_tail->next, node);
@@ -426,8 +403,6 @@ bool list_insert(hashtable *htab, MarkPtrType *head, NodeType *node) {
 
         MarkPtrType expected = create_mark_pointer(get_node(cur), 0);
         MarkPtrType desired = create_mark_pointer(node, 0);
-        // if (*prev == expected) {
-        // HB
         if (atomic_compare_and_swap(prev, expected, desired)) {
             result = true;
             break;
@@ -462,10 +437,6 @@ bool list_delete(hashtable *htab, MarkPtrType *head, so_key_t key) {
         if (!atomic_compare_exchange_strong(&cur->next, &expected, desired)) {
             continue;
         }
-        /* if (cur->next != expected) {
-            atomic_store(&cur->next, create_mark_pointer(next, 1));
-            continue;
-        } */
 
         // expected: prev points to cur and prev is not marked for deletion
         expected = create_mark_pointer(cur, 0);

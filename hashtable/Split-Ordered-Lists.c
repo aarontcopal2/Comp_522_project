@@ -238,7 +238,6 @@ static void resize_task(hashtable *htab, int blocking) {
     while ((my_block = atomic_fetch_add(&htab->next_move_block, 1)) < num_old_blocks) {
         size_t block_start = my_block * BLOCK_SIZE;
         size_t block_end = (my_block + 1) * BLOCK_SIZE;
-        size_t old_size = atomic_load(&htab->old_size);
         if (block_end > old_size) {
             block_end = old_size;
         }
@@ -299,11 +298,12 @@ static void resize_replica(hashtable *htab) {
 static void resize_primary(hashtable *htab) {
     // initialize values
     size_t old_size = atomic_load(&htab->size);
+    size_t size = old_size * 2;
+    segment_t *old_ST = atomic_load(&htab->ST);
     atomic_store(&htab->old_size, old_size);
-    atomic_store(&htab->old_ST, atomic_load(&htab->ST));
-    atomic_store(&htab->size, old_size * 2);
-    size_t size = atomic_load(&htab->size);
-
+    atomic_store(&htab->size, size);
+    atomic_store(&htab->old_ST, old_ST);
+    
     // malloc new table.
     segment_t *ST = malloc(sizeof(segment_t) * size);
     for (int i = 0; i < size; i++) {
@@ -335,7 +335,6 @@ static void resize_primary(hashtable *htab) {
     atomic_store(&htab->num_moved_blocks, 0);
 
     // freeing old table
-    segment_t *old_ST = atomic_load(&htab->old_ST);
     // free child segments first
     for (int i = 0; i < old_size; i++) {
         free(old_ST[i]);
@@ -381,8 +380,8 @@ static void free_all_nodes(NodeType *start_node) {
     NodeType *node = start_node, *next;
 
     while(node) {
-        if (node != NULL && atomic_load(&node->next)) {
-            next = atomic_load(&node->next);
+        next = atomic_load(&node->next);
+        if (node != NULL && next) {
             free(node);
             node = next;
         } else {

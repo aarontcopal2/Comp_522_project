@@ -482,7 +482,7 @@ void hashtable_destroy(hashtable *htab) {
 
     // free hazard pointers
     hazard_ptr_node *start_hp = atomic_load(&htab->hp_head);
-    uint hp_count = atomic_load(&htab->hazard_pointers_count);
+    uint hp_count = atomic_load_explicit(&htab->hazard_pointers_count, memory_order_relaxed);
     free_hazard_pointers(start_hp, hp_count);
     
     // free child segments

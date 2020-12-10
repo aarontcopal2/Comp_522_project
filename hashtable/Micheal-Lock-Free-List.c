@@ -131,12 +131,12 @@ static void update_global_hazard_pointer_list(hashtable *htab, hazard_ptr_node *
         if(atomic_compare_exchange_strong(&htab->hp_tail, &current_tail, &local_hp_head[2])) {
             ANNOTATE_HAPPENS_AFTER(current_tail);
             ANNOTATE_HAPPENS_BEFORE(&current_tail->next);
-            atomic_store(&current_tail->next, local_hp_head);
+            atomic_store_explicit(&current_tail->next, local_hp_head, memory_order_release);
         } else {
             goto try_again;
         }
     }
-    atomic_fetch_add(&htab->hazard_pointers_count, 3);
+    atomic_fetch_add_explicit(&htab->hazard_pointers_count, 3, memory_order_release);
 }
 
 
@@ -169,7 +169,7 @@ static NodeType* get_hazard_pointer(hashtable *htab, int index) {
 
 static void set_hazard_pointer(hashtable *htab, NodeType* node, int index) {
     hazard_ptr_node *hpn = get_thread_hazard_pointers(htab);
-    atomic_store(&hpn[index].hp, node);
+    atomic_store_explicit(&hpn[index].hp, node, memory_order_release);
 }
 
 
@@ -260,8 +260,8 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
     printf("local_scan_for_reclaimable_nodes\n");
     hazard_ptr_node *hp_ref = hp_head;
     while (hp_ref) {
-        NodeType *hp = atomic_load(&hp_ref->hp);
-        hazard_ptr_node *next = atomic_load(&hp_ref->next);
+        NodeType *hp = atomic_load_explicit(&hp_ref->hp, memory_order_acquire);
+        hazard_ptr_node *next = atomic_load_explicit(&hp_ref->next, memory_order_acquire);
         ANNOTATE_HAPPENS_AFTER(&hp_ref->next);
         // if hazard pointer is NULL, move to next reference
         if (hp == NULL) {
@@ -342,7 +342,7 @@ void retire_node(hashtable *htab, NodeType *node) {
     * what is omega(H)? Shouldnt RETIRE_THRESHOLD < H and not >= H? 
     * RETIRE_THRESHOLD should be small so that unneeded nodes are removed on regular basis
     * large threshold values will cause problems in case of idle threads */
-    uint RETIRE_THRESHOLD = atomic_load(&htab->hazard_pointers_count) + 10;
+    uint RETIRE_THRESHOLD = atomic_load_explicit(&htab->hazard_pointers_count, memory_order_acquire) + 10;
 
     // can we safely change the next pointer of node to null?
     VALGRIND_HG_DISABLE_CHECKING(&node->next, sizeof(NodeType));

@@ -348,7 +348,6 @@ static void resize_primary(hashtable *htab) {
 
 static void resize_hashtable(hashtable *htab) {
     debug_print("resize_hashtable()\n");
-    printf("resize_hashtable()\n");
 
     /* resizing requires mallocing a new memory region and copying old values to this new region and swapping the data structure pointers
     * This operation needs to be atomic, else we may loose some insertions happening between memcpy and swapping of old table with new

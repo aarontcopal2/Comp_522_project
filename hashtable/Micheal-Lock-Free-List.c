@@ -17,7 +17,7 @@
 //******************************************************************************
 
 #include "Micheal-Lock-Free-List.h"
-#include "splay-tree/splay-uint64.h"
+#include "Micheal-splay-tree.h"
 
 
 
@@ -35,43 +35,6 @@
 
 
 //******************************************************************************
-// splay-tree definitions
-//******************************************************************************
-
-#define st_insert				\
-  typed_splay_insert(int)
-
-#define st_lookup				\
-  typed_splay_lookup(int)
-
-#define st_delete				\
-  typed_splay_delete(int)
-
-#define st_forall				\
-  typed_splay_forall(int)
-
-#define st_count				\
-  typed_splay_count(int)
-
-
-// we have a special case where we only need to search for keys,
-// we are not concerned with the value. Can we remove the value parameter from the struct?
-typedef struct typed_splay_node(int) {
-  struct typed_splay_node(int) *left;
-  struct typed_splay_node(int) *right;
-  uint64_t key;
-  int val;
-} typed_splay_node(int);
-
-
-typedef typed_splay_node(int) splay_t;
-
-
-typed_splay_impl(int)
-
-
-
-//******************************************************************************
 // local data
 //******************************************************************************
 
@@ -83,12 +46,6 @@ __thread hazard_ptr_node *local_hp_head;
 __thread NodeType *local_retired_list_head;
 __thread NodeType *local_retired_list_tail;
 __thread uint local_retired_node_count = 0;
-
-
-__thread splay_t *private_tree_root = 0;
-
-
-// __thread _Atomic(MarkPtrType*) prev;
 
 
 
@@ -247,17 +204,9 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
 }
 
 
-splay_t* splay_node(uint64_t key) {
-  splay_t *node = (splay_t *) malloc(sizeof(splay_t));
-  //node->left = node->right = NULL;
-  node->key = key;
-  return node;
-}
-
-
 static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
     // stage1: Scan hp_head list and insert all non-null nodes to private hashtable phtable
-    printf("local_scan_for_reclaimable_nodes\n");
+    debug_print("local_scan_for_reclaimable_nodes\n");
     hazard_ptr_node *hp_ref = hp_head;
     while (hp_ref) {
         NodeType *hp = atomic_load_explicit(&hp_ref->hp, memory_order_acquire);
@@ -268,9 +217,8 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
             hp_ref = next;
             continue;
         }
-        splay_t *node = splay_node((uint64_t)hp);
-        st_insert(&private_tree_root, node);
-        free(node);
+        uint64_t key = (uint64_t)hp;
+        splay_insert(key, key);
   
         if (!next) {
             break;
@@ -280,20 +228,36 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
 
     // stage2: check for all nodes in local_retired_list_head list to see if its present in phtable
     // if no: node is safe for reclamation/reuse, else do nothing
-    NodeType *retired_list_ref = local_retired_list_head;
-    while (retired_list_ref) {
-        if (st_lookup(&private_tree_root, (uint64_t)retired_list_ref) == NULL) {
+    NodeType *current = local_retired_list_head;
+    NodeType *prev_node_not_deleted = current;
+    NodeType *next;
+    uint64_t key, val;
+
+    while (current) {
+        key = val = (uint64_t)current;
+        next = atomic_load(&current->next);
+        if (splay_lookup(key) == NULL) {
             // node can be safely reclaimed
 
-            // sol_ht_object_t *parent_obj = retired_list_ref->sol_obj_ref;
+            // sol_ht_object_t *parent_obj = current->sol_obj_ref;
             // sol_ht_free(parent_obj);
-            free(retired_list_ref);
+            if (current == local_retired_list_head) {
+                local_retired_list_head = next;
+            }
+            if (current != prev_node_not_deleted) {
+                atomic_store(&prev_node_not_deleted->next, next);
+            } else {
+                prev_node_not_deleted = next;
+            }
+            free(current);
             local_retired_node_count--;
             /* what do we do with nodes that are safe for reclamation? We can push such nodes to 
             * another private list of free nodes. Each thread will first check if it has elements
             * in its free-list before mallocing */
+        } else {
+            prev_node_not_deleted = current;
         }
-        retired_list_ref = atomic_load(&retired_list_ref->next);
+        current = next;
     }
 }
 

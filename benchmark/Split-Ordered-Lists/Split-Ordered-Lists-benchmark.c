@@ -136,7 +136,7 @@ void split_ordered_list_benchmark () {
 
     // seeding so that different random sequences get generated
     srand (time(NULL));
-    benchmark2(1);
+    //benchmark2(1);
 
     /* int THREADS = 30;
     pthread_t thr[THREADS];

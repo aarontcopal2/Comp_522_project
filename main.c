@@ -15,8 +15,8 @@
 // local includes
 //******************************************************************************
 
-#include "benchmark/splay-tree-benchmark.h"
-#include "benchmark/Split-Ordered-Lists-benchmark.h"
+#include "benchmark/splay-tree/splay-tree-benchmark.h"
+#include "benchmark/Split-Ordered-Lists/Split-Ordered-Lists-benchmark.h"
 
 
 

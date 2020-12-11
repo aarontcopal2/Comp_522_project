@@ -35,7 +35,7 @@
 
 
 //******************************************************************************
-// hashtable definitions
+// splay-tree definitions
 //******************************************************************************
 
 #define st_insert				\
@@ -85,7 +85,7 @@ __thread NodeType *local_retired_list_tail;
 __thread uint local_retired_node_count = 0;
 
 
-__thread splay_t *private_ht_root = 0;
+__thread splay_t *private_tree_root = 0;
 
 
 // __thread _Atomic(MarkPtrType*) prev;
@@ -269,7 +269,7 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
             continue;
         }
         splay_t *node = splay_node((uint64_t)hp);
-        st_insert(&private_ht_root, node);
+        st_insert(&private_tree_root, node);
         free(node);
   
         if (!next) {
@@ -282,7 +282,7 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
     // if no: node is safe for reclamation/reuse, else do nothing
     NodeType *retired_list_ref = local_retired_list_head;
     while (retired_list_ref) {
-        if (st_lookup(&private_ht_root, (uint64_t)retired_list_ref) == NULL) {
+        if (st_lookup(&private_tree_root, (uint64_t)retired_list_ref) == NULL) {
             // node can be safely reclaimed
 
             // sol_ht_object_t *parent_obj = retired_list_ref->sol_obj_ref;

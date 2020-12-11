@@ -25,7 +25,7 @@ typedef struct {
 // local data
 //******************************************************************************
 
-#define ADDRESS_SIZE 123
+#define ADDRESS_SIZE 2702
 
 
 extern address addrs[ADDRESS_SIZE];

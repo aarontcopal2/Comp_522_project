@@ -40,9 +40,7 @@ static void *splay_tree_thread_operations(void *arg) {
         address *val = (void*)&addrs[key];
 
         address_splay_insert(key, val);
-
         address *result_val = (address*) address_splay_entry_val_get(key);
-
         address_splay_delete(key);
         // result_val = (address*) address_splay_entry_val_get(key);
     }

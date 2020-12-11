@@ -1,4 +1,21 @@
+#ifndef address_splay_tree_h
+#define address_splay_tree_h
+
+//******************************************************************************
+// local includes
+//******************************************************************************
+
+#include "../benchmark.h"
+
+
+
+//******************************************************************************
+// type definitions
+//******************************************************************************
+
 typedef struct address_splay_entry_t address_splay_entry_t;
+
+
 
 //******************************************************************************
 // interface operations
@@ -15,7 +32,7 @@ void
 address_splay_insert
 (
  uint64_t key,
- int val
+ address *val
 );
 
 
@@ -26,8 +43,10 @@ address_splay_delete
 );
 
 
-int
+address*
 address_splay_entry_val_get
 (
  uint64_t key
 );
+
+#endif  // address_splay_tree_h

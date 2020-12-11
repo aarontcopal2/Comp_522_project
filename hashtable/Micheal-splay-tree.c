@@ -14,6 +14,7 @@
 #include "splay-tree/splay-uint64.h"
 #include "channel/lib/prof-lean/spinlock.h"
 #include "channel/hpcrun/gpu/gpu-splay-allocator.h"
+#include "Micheal-splay-tree.h"
 
 
 
@@ -43,6 +44,9 @@
   typed_splay_free(free_list, node)
 
 
+#undef typed_splay_node
+#define typed_splay_node(int) splay_entry_t
+
 // we have a special case where we only need to search for keys,
 // we are not concerned with the value. Can we remove the value parameter from the struct?
 typedef struct typed_splay_node(int) {
@@ -51,9 +55,6 @@ typedef struct typed_splay_node(int) {
   uint64_t key;
   int val;
 } typed_splay_node(int);
-
-
-typedef typed_splay_node(int) splay_entry_t;
 
 
 typed_splay_impl(int)

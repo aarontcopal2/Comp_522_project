@@ -1,3 +1,6 @@
+#ifndef benchmark_h
+#define benchmark_h
+
 //******************************************************************************
 // system includes
 //******************************************************************************
@@ -34,3 +37,5 @@ extern address addrs[ADDRESS_SIZE];
 //******************************************************************************
 
 void print_address(uint64_t thread_index, int key, address *addr);
+
+#endif      // benchmark_h

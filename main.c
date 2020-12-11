@@ -35,6 +35,6 @@
 //******************************************************************************
 
 int main () {
-    //splay_tree_benchmark();
-    split_ordered_list_benchmark();
+    splay_tree_benchmark();
+    // split_ordered_list_benchmark();
 }

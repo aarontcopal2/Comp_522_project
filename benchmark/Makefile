@@ -7,9 +7,10 @@ CXX_VERSION=
 LIBS=-latomic -lpthread
 MKDIR_P = mkdir -p
 
-all: benchmark.c splay-tree/splay-tree-benchmark.c Split-Ordered-Lists/Split-Ordered-Lists-benchmark.c
+all: benchmark.c splay-tree/address-splay-tree.c splay-tree/splay-tree-benchmark.c Split-Ordered-Lists/Split-Ordered-Lists-benchmark.c
 	$(MKDIR_P) build
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/benchmark.o benchmark.c -c
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/address-splay-tree.o splay-tree/address-splay-tree.c -c
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/splay-tree-benchmark.o splay-tree/splay-tree-benchmark.c -c
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/Split-Ordered-Lists-benchmark.o Split-Ordered-Lists/Split-Ordered-Lists-benchmark.c -c
 	

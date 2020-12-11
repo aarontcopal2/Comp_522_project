@@ -2,8 +2,6 @@
 // system includes
 //******************************************************************************
 
-#include <time.h>       // clock, clock_t
-#include <pthread.h>    // pthread_self, pthread_t, pthread_create, pthread_join
 #include <stdlib.h>     // malloc
 
 

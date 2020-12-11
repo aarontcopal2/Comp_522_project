@@ -14,6 +14,10 @@
 hashtable *htab;
 
 
+// SIZE is a multiple of 2 since the thread counts are a factor of 2
+#define SIZE 1024
+
+
 
 //******************************************************************************
 // private operations
@@ -50,13 +54,75 @@ static void *hashtable_operations(void *arg) {
         status = map_insert(htab, key, val);
 
         address *result_val = (address*) map_search(htab, key);
-        print_address(t_index, key, result_val);
+        //print_address(t_index, key, result_val);
 
         status = map_delete(htab, key);
 
         result_val = (address*) map_search(htab, key);
-        print_address(t_index, key, result_val);   
+        //print_address(t_index, key, result_val);   
     }
+}
+
+
+static void *benchmark2_operations(void *arg) {
+    bool status;
+    int iterations = *(int*)arg;
+    
+    // clock start
+    clock_t start = clock();
+    t_key key;
+    val_t val;
+    address *result_val;
+
+    for (int i = 0; i < iterations; i++) {
+        key = (rand() % ADDRESS_SIZE);
+        val = (void*)&addrs[key];
+
+        status = map_insert(htab, key, val);
+        // result_val = (address*) map_search(htab, key);
+        // status = map_delete(htab, key);
+    }
+
+    // clock end
+    clock_t end = clock();
+    // print time
+    double cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+}
+
+
+static void benchmark1(int thread_count) {
+    int iterations = SIZE / thread_count;
+    // 50% inserts, 0% finds, 50% deletes
+    
+}
+
+
+static void benchmark2(int thread_count) {
+    int iterations = SIZE / thread_count;
+    pthread_t thr[thread_count];
+
+    // 33% inserts, 33% finds, 33% deletes
+    for (int i = 0; i < thread_count; i++) {
+        pthread_create(&thr[i], NULL, benchmark2_operations, &iterations);
+    }
+    for (int i = 0; i < thread_count; i++) {
+        pthread_join(thr[i], NULL);
+    }
+}
+
+
+static void benchmark3() {
+    // 25% inserts, 50% finds, 25% deletes
+}
+
+
+static void benchmark4() {
+    // 15% inserts, 70% finds, 15% deletes
+}
+
+
+static void benchmark5() {
+    // 5% inserts, 90% finds, 5% deletes
 }
 
 
@@ -68,7 +134,11 @@ static void *hashtable_operations(void *arg) {
 void split_ordered_list_benchmark () {
     htab = hashtable_initialize();
 
-    int THREADS = 30;
+    // seeding so that different random sequences get generated
+    srand (time(NULL));
+    benchmark2(1);
+
+    /* int THREADS = 30;
     pthread_t thr[THREADS];
     int *index = malloc(sizeof(int) * THREADS);
 
@@ -80,7 +150,7 @@ void split_ordered_list_benchmark () {
         pthread_join(thr[i], NULL);
     }
 
-    free(index);
+    free(index); */
     print_hashtable(htab);
     
     hashtable_destroy(htab);

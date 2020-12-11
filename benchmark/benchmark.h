@@ -3,6 +3,8 @@
 //******************************************************************************
 
 #include <stdint.h>
+#include <time.h>       // clock, clock_t
+#include <pthread.h>    // pthread_self, pthread_t, pthread_create, pthread_join
 
 
 

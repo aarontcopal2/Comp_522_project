@@ -10,3 +10,6 @@ main
 output
 helgrind_output*
 memcheck_output*
+
+#misc
+machine_specs

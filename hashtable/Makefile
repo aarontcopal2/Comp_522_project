@@ -7,15 +7,18 @@ CXX_VERSION=
 LIBS=-latomic -lpthread
 MKDIR_P = mkdir -p
 
-all: memory-manager Micheal-Lock-Free-List.c Split-Ordered-Lists.c splay-tree/splay-uint64.c
+all: memory-manager splay-tree/splay-uint64.c Micheal-splay-tree.c Micheal-Lock-Free-List.c Split-Ordered-Lists.c
 	$(MKDIR_P) build
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/splay-uint64.o splay-tree/splay-uint64.c -c
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/Micheal-splay-tree.o Micheal-splay-tree.c -c
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/Micheal-Lock-Free-List.o Micheal-Lock-Free-List.c -c
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/Split-Ordered-Lists.o Split-Ordered-Lists.c -c
 
 
 memory-manager:	channel/hashtable-memory-manager.c
 	$(MKDIR_P) build
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/spinlock.o channel/lib/prof-lean/spinlock.c -c
+	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/gpu-splay-allocator.o channel/hpcrun/gpu/gpu-splay-allocator.c -c
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/stacks.o channel/lib/prof-lean/stacks.c -c
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/bistack.o channel/lib/prof-lean/bistack.c -c
 	$(CC) $(OPT) $(CXX_VERSION) $(LIBS) -o build/bichannel.o channel/lib/prof-lean/bichannel.c -c

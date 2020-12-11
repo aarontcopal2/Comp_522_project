@@ -23,6 +23,9 @@ typedef struct {
 #define ADDRESS_SIZE 123
 
 
+extern address addrs[ADDRESS_SIZE];
+
+
 
 //******************************************************************************
 // interface operations

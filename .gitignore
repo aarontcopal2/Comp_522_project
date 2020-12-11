@@ -1,5 +1,6 @@
 # binary
 hashtable/build/
+benchmark/build/
 main
 
 # vscode

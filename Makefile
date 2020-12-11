@@ -29,4 +29,5 @@ memcheck: all
 
 clean:
 	$(MAKE) -C "hashtable" clean
+	$(MAKE) -C "benchmark" clean
 	rm main

@@ -59,7 +59,7 @@ size
 
 void
 clear_splay_tree(
-    void
+    int delete_root
 );
 
 #endif  // address_splay_tree_h

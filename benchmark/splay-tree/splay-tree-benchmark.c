@@ -285,30 +285,31 @@ void splay_tree_benchmark () {
     for (int t=1; t <=32; t*=2) {
         initialize_splay_tree();
         benchmark1(t);
-        clear_splay_tree();
+        clear_splay_tree(0);
     }
     printf("\nBenchmark 2: 33%% inserts, 33%% finds, 33%% deletes\n====================================================\n");
     for (int t=1; t <=32; t*=2) {
         initialize_splay_tree();
         benchmark2(t);
-        clear_splay_tree();
+        clear_splay_tree(0);
     }
     printf("\nBenchmark 3: 25%% inserts, 50%% finds, 25%% deletes\n====================================================\n");
     for (int t=1; t <=32; t*=2) {
         initialize_splay_tree();
         benchmark3(t);
-        clear_splay_tree();
+        clear_splay_tree(0);
     }
     printf("\nBenchmark 4: 15%% inserts, 70%% finds, 15%% deletes\n====================================================\n");
     for (int t=1; t <=32; t*=2) {
         initialize_splay_tree();
         benchmark4(t);
-        clear_splay_tree();
+        clear_splay_tree(0);
     }
     printf("\nBenchmark 5: 5%% inserts, 90%% finds, 5%% deletes\n====================================================\n");
     for (int t=1; t <=32; t*=2) {
         initialize_splay_tree();
         benchmark5(t);
-        clear_splay_tree();
+        clear_splay_tree(0);
     }
+    clear_splay_tree(1);
 }

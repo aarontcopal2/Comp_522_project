@@ -22,8 +22,6 @@
 // local data
 //******************************************************************************
 
-// ITERATION_SIZE is a multiple of 2 since the thread counts are a factor of 2
-#define ITERATION_SIZE 1024
 #define LOWER 1500
 
 

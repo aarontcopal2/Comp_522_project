@@ -14,14 +14,18 @@
 hashtable *htab;
 
 
-// ITERATION_SIZE is a multiple of 2 since the thread counts are a factor of 2
-#define ITERATION_SIZE 1024
-
+#define LOWER 1500
 
 
 //******************************************************************************
 // private operations
 //******************************************************************************
+
+static uint64_t random_key() {
+    return (rand() % 
+           (ADDRESS_SIZE - LOWER)) + LOWER;
+}
+
 
 static void *small_hashtable_operations(void *arg) {
     bool status;
@@ -64,65 +68,234 @@ static void *hashtable_operations(void *arg) {
 }
 
 
-static void *benchmark2_operations(void *arg) {
+static void *benchmark1_operations(void *arg) {
+    // 50% inserts, 0% finds, 50% deletes
     bool status;
     int iterations = *(int*)arg;
+    iterations /= 2;
     
-    // clock start
-    clock_t start = clock();
     t_key key;
     val_t val;
     address *result_val;
 
     for (int i = 0; i < iterations; i++) {
-        key = (rand() % ADDRESS_SIZE);
+        key = random_key();
         val = (void*)&addrs[key];
 
         status = map_insert(htab, key, val);
-        // result_val = (address*) map_search(htab, key);
-        // status = map_delete(htab, key);
+        status = map_delete(htab, key);
+    }
+}
+
+
+static void benchmark1(int thread_count) {
+    // 50% inserts, 0% finds, 50% deletes
+    int iterations = ITERATION_SIZE / thread_count;
+    pthread_t thr[thread_count];
+
+    // clock start
+    clock_t start = clock();
+
+    for (int i = 0; i < thread_count; i++) {
+        pthread_create(&thr[i], NULL, benchmark1_operations, &iterations);
+    }
+    for (int i = 0; i < thread_count; i++) {
+        pthread_join(thr[i], NULL);
     }
 
     // clock end
     clock_t end = clock();
     // print time
-    double cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+    double benchmark1_time = ((double) (end - start)) / CLOCKS_PER_SEC;
+    printf("benchmark1: threads: %d, time: %f\n", thread_count, benchmark1_time);
 }
 
 
-static void benchmark1(int thread_count) {
-    int iterations = ITERATION_SIZE / thread_count;
-    // 50% inserts, 0% finds, 50% deletes
+static void *benchmark2_operations(void *arg) {
+    // 33% inserts, 33% finds, 33% deletes
+    bool status;
+    int iterations = *(int*)arg;
+    iterations /= 3;
     
+    t_key key;
+    val_t val;
+    address *result_val;
+
+    for (int i = 0; i < iterations; i++) {
+        key = random_key();
+        val = (void*)&addrs[key];
+
+        status = map_insert(htab, key, val);
+        result_val = (address*) map_search(htab, key);
+        status = map_delete(htab, key);
+    }
 }
 
 
 static void benchmark2(int thread_count) {
+    // 33% inserts, 33% finds, 33% deletes
     int iterations = ITERATION_SIZE / thread_count;
     pthread_t thr[thread_count];
 
-    // 33% inserts, 33% finds, 33% deletes
+    // clock start
+    clock_t start = clock();
+
     for (int i = 0; i < thread_count; i++) {
         pthread_create(&thr[i], NULL, benchmark2_operations, &iterations);
     }
     for (int i = 0; i < thread_count; i++) {
         pthread_join(thr[i], NULL);
     }
+
+    // clock end
+    clock_t end = clock();
+    // print time
+    double benchmark2_time = ((double) (end - start)) / CLOCKS_PER_SEC;
+    printf("benchmark2: threads: %d, time: %f\n", thread_count, benchmark2_time);
 }
 
 
-static void benchmark3() {
+static void *benchmark3_operations(void *arg) {
     // 25% inserts, 50% finds, 25% deletes
+    bool status;
+    int iterations = *(int*)arg;
+    iterations /= 4;
+    
+    t_key key1, key2;
+    val_t val;
+    address *result_val1, *result_val2;
+
+    for (int i = 0; i < iterations; i++) {
+        key1 = random_key();
+        key2 = random_key();
+        val = (void*)&addrs[key1];
+
+        status = map_insert(htab, key1, val);
+        result_val1 = (address*) map_search(htab, key1);
+        result_val2 = (address*) map_search(htab, key2);
+        status = map_delete(htab, key1);
+    }
 }
 
 
-static void benchmark4() {
+static void benchmark3(int thread_count) {
+    // 25% inserts, 50% finds, 25% deletes
+    int iterations = ITERATION_SIZE / thread_count;
+    pthread_t thr[thread_count];
+
+    // clock start
+    clock_t start = clock();
+
+    for (int i = 0; i < thread_count; i++) {
+        pthread_create(&thr[i], NULL, benchmark3_operations, &iterations);
+    }
+    for (int i = 0; i < thread_count; i++) {
+        pthread_join(thr[i], NULL);
+    }
+
+    // clock end
+    clock_t end = clock();
+    // print time
+    double benchmark3_time = ((double) (end - start)) / CLOCKS_PER_SEC;
+    printf("benchmark3: threads: %d, time: %f\n", thread_count, benchmark3_time);
+}
+
+
+static void *benchmark4_operations(void *arg) {
     // 15% inserts, 70% finds, 15% deletes
+    bool status;
+    int iterations = *(int*)arg;
+    
+    t_key key1, key2, key3, key4, key5;
+    val_t val;
+    address *result_val1, *result_val2, *result_val3, *result_val4, *result_val5;
+
+    for (int i = 0; i < iterations; i++) {
+        key1 = random_key();
+        key2 = random_key();
+        key3 = random_key();
+        key4 = random_key();
+        key5 = random_key();
+        val = (void*)&addrs[key1];
+
+        status = map_insert(htab, key1, val);
+        result_val1 = (address*) map_search(htab, key1);
+        result_val2 = (address*) map_search(htab, key2);
+        result_val3 = (address*) map_search(htab, key3);
+        result_val4 = (address*) map_search(htab, key4);
+        result_val5 = (address*) map_search(htab, key5);
+        status = map_delete(htab, key1);
+    }
 }
 
 
-static void benchmark5() {
+static void benchmark4(int thread_count) {
+    // 15% inserts, 70% finds, 15% deletes
+    int iterations = ITERATION_SIZE / thread_count;
+    pthread_t thr[thread_count];
+
+    // clock start
+    clock_t start = clock();
+
+    for (int i = 0; i < thread_count; i++) {
+        pthread_create(&thr[i], NULL, benchmark4_operations, &iterations);
+    }
+    for (int i = 0; i < thread_count; i++) {
+        pthread_join(thr[i], NULL);
+    }
+
+    // clock end
+    clock_t end = clock();
+    // print time
+    double benchmark4_time = ((double) (end - start)) / CLOCKS_PER_SEC;
+    printf("benchmark2: threads: %d, time: %f\n", thread_count, benchmark4_time);
+}
+
+
+static void *benchmark5_operations(void *arg) {
     // 5% inserts, 90% finds, 5% deletes
+    bool status;
+    int iterations = *(int*)arg;
+    
+    t_key key;
+    val_t val;
+    address *result_val;
+
+    for (int i = 0; i < iterations; i++) {
+        for (int j = 0; j < 17; j++) {
+            key = random_key();
+            result_val = (address*) map_search(htab, key);
+        }
+        key = random_key();
+        val = (void*)&addrs[key];
+
+        status = map_insert(htab, key, val);
+        result_val = (address*) map_search(htab, key);
+        status = map_delete(htab, key);
+    }
+}
+
+
+static void benchmark5(int thread_count) {
+    // 5% inserts, 90% finds, 5% deletes
+    int iterations = ITERATION_SIZE / thread_count;
+    pthread_t thr[thread_count];
+
+    // clock start
+    clock_t start = clock();
+
+    for (int i = 0; i < thread_count; i++) {
+        pthread_create(&thr[i], NULL, benchmark5_operations, &iterations);
+    }
+    for (int i = 0; i < thread_count; i++) {
+        pthread_join(thr[i], NULL);
+    }
+
+    // clock end
+    clock_t end = clock();
+    // print time
+    double benchmark5_time = ((double) (end - start)) / CLOCKS_PER_SEC;
+    printf("benchmark5: threads: %d, time: %f\n", thread_count, benchmark5_time);
 }
 
 
@@ -136,22 +309,35 @@ void split_ordered_list_benchmark () {
 
     // seeding so that different random sequences get generated
     srand (time(NULL));
-    //benchmark2(1);
 
-    /* int THREADS = 30;
-    pthread_t thr[THREADS];
-    int *index = malloc(sizeof(int) * THREADS);
-
-    for (int i = 0; i < THREADS; i++) {
-        index[i] = i;
-        pthread_create(&thr[i], NULL, hashtable_operations, &index[i]);
+    printf("Benchmark 1: 50%% inserts, 0%% finds, 50%% deletes\n====================================================\n");
+    for (int t=1; t <=32; t*=2) {
+        htab = hashtable_initialize();
+        benchmark1(t);
+        hashtable_destroy(htab);
     }
-    for (int i = 0; i < THREADS; i++) {
-        pthread_join(thr[i], NULL);
+    printf("\nBenchmark 2: 33%% inserts, 33%% finds, 33%% deletes\n====================================================\n");
+    for (int t=1; t <=32; t*=2) {
+        htab = hashtable_initialize();
+        benchmark2(t);
+        hashtable_destroy(htab);
     }
-
-    free(index); */
-    print_hashtable(htab);
-    
-    hashtable_destroy(htab);
+    printf("\nBenchmark 3: 25%% inserts, 50%% finds, 25%% deletes\n====================================================\n");
+    for (int t=1; t <=32; t*=2) {
+        htab = hashtable_initialize();
+        benchmark3(t);
+        hashtable_destroy(htab);
+    }
+    printf("\nBenchmark 4: 15%% inserts, 70%% finds, 15%% deletes\n====================================================\n");
+    for (int t=1; t <=32; t*=2) {
+        htab = hashtable_initialize();
+        benchmark4(t);
+        hashtable_destroy(htab);
+    }
+    printf("\nBenchmark 5: 5%% inserts, 90%% finds, 5%% deletes\n====================================================\n");
+    for (int t=1; t <=32; t*=2) {
+        htab = hashtable_initialize();
+        benchmark5(t);
+        hashtable_destroy(htab);
+    }
 }

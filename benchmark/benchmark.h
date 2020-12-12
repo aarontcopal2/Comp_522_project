@@ -28,6 +28,10 @@ typedef struct {
 #define ADDRESS_SIZE 2702
 
 
+// ITERATION_SIZE is a multiple of 2 since the thread counts are a factor of 2
+#define ITERATION_SIZE 1024
+
+
 extern address addrs[ADDRESS_SIZE];
 
 

@@ -14,8 +14,8 @@
 hashtable *htab;
 
 
-// SIZE is a multiple of 2 since the thread counts are a factor of 2
-#define SIZE 1024
+// ITERATION_SIZE is a multiple of 2 since the thread counts are a factor of 2
+#define ITERATION_SIZE 1024
 
 
 
@@ -91,14 +91,14 @@ static void *benchmark2_operations(void *arg) {
 
 
 static void benchmark1(int thread_count) {
-    int iterations = SIZE / thread_count;
+    int iterations = ITERATION_SIZE / thread_count;
     // 50% inserts, 0% finds, 50% deletes
     
 }
 
 
 static void benchmark2(int thread_count) {
-    int iterations = SIZE / thread_count;
+    int iterations = ITERATION_SIZE / thread_count;
     pthread_t thr[thread_count];
 
     // 33% inserts, 33% finds, 33% deletes

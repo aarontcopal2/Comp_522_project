@@ -4,6 +4,8 @@
 
 #include <stddef.h>     // NULL
 #include <assert.h>     // assert
+#include <stdlib.h>     // free
+#include <valgrind/helgrind.h>  // ANNOTATE_HAPPENS_AFTER, ANNOTATE_HAPPENS_BEFORE
 
 
 
@@ -93,10 +95,28 @@ address_splay_new
     address *val
 )
 {
-    address_splay_entry_t *e = address_splay_alloc();
+    address_splay_entry_t *e = malloc(sizeof(address_splay_entry_t));
+    e->left = e->right = NULL;
     e->key = key;
     e->val = val;
     return e;
+}
+
+
+static void free_splay_tree(address_splay_entry_t *node) {
+    // we dont want to delete the root
+    if (node == NULL || node == splay_root) {
+        return;
+    }
+
+    /* first recur on left child */
+    free_splay_tree(node->left);
+
+    /* now recur on right child */
+    free_splay_tree(node->right);     
+
+    // freeing the node
+    free(node);
 }
 
 
@@ -111,9 +131,11 @@ address_splay_lookup
     uint64_t key
 )
 {
+    ANNOTATE_RWLOCK_ACQUIRED(&address_splay_lock, 1);
     spinlock_lock(&address_splay_lock);
     address_splay_entry_t *result = st_lookup(&splay_root, key);
     spinlock_unlock(&address_splay_lock);
+    ANNOTATE_RWLOCK_RELEASED(&address_splay_lock, 1);
     return result;
 }
 
@@ -128,10 +150,12 @@ address_splay_insert
     if (address_splay_lookup(key)) {
         // Do nothing, entry for a given key should be inserted only once
     } else {
+        ANNOTATE_RWLOCK_ACQUIRED(&address_splay_lock, 1);
         spinlock_lock(&address_splay_lock);
         address_splay_entry_t *entry = address_splay_new(key, val);
         st_insert(&splay_root, entry);  
         spinlock_unlock(&address_splay_lock);
+        ANNOTATE_RWLOCK_RELEASED(&address_splay_lock, 1);
     }
 }
 
@@ -142,10 +166,14 @@ address_splay_delete
     uint64_t key
 )
 {
+    ANNOTATE_RWLOCK_ACQUIRED(&address_splay_lock, 1);
     spinlock_lock(&address_splay_lock);
     address_splay_entry_t *node = st_delete(&splay_root, key);
-    st_free(&splay_free_list, node);
+    //st_free(&splay_free_list, node);
+    free(node);
     spinlock_unlock(&address_splay_lock);
+    ANNOTATE_RWLOCK_RELEASED(&address_splay_lock, 1);
+
 }
 
 
@@ -156,5 +184,24 @@ address_splay_entry_val_get
 )
 {
     address_splay_entry_t *e = address_splay_lookup(key);
+    if (!e) {
+        return NULL;
+    }
     return e->val;
+}
+
+
+uint64_t size() {
+    ANNOTATE_RWLOCK_ACQUIRED(&address_splay_lock, 1);
+    spinlock_lock(&address_splay_lock);
+    uint64_t size = st_count(splay_root);
+    spinlock_unlock(&address_splay_lock);
+    ANNOTATE_RWLOCK_RELEASED(&address_splay_lock, 1);
+    return size;
+}
+
+
+void
+clear_splay_tree() {
+    free_splay_tree(splay_root);
 }

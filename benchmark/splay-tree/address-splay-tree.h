@@ -49,4 +49,17 @@ address_splay_entry_val_get
  uint64_t key
 );
 
+
+uint64_t
+size
+(
+    void
+);
+
+
+void
+clear_splay_tree(
+    void
+);
+
 #endif  // address_splay_tree_h

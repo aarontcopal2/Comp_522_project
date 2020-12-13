@@ -8,6 +8,7 @@
 //******************************************************************************
 
 #include <pthread.h>    // pthread_create
+#include <stdio.h>      // printf
 
 
 
@@ -35,6 +36,8 @@
 //******************************************************************************
 
 int main () {
+    debug_print("splay_tree_benchmark\n");
     splay_tree_benchmark();
-    // split_ordered_list_benchmark();
+    debug_print("\nsplit_ordered_list_benchmark\n");
+    split_ordered_list_benchmark();
 }

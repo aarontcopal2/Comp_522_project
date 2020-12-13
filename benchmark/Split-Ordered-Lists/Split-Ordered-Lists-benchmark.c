@@ -8,6 +8,16 @@
 
 
 //******************************************************************************
+// type definitions
+//******************************************************************************
+
+#define DEBUG 0
+#define debug_print(fmt, ...) \
+    do { if (DEBUG) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)
+
+
+
+//******************************************************************************
 // local data
 //******************************************************************************
 
@@ -15,6 +25,10 @@ hashtable *htab;
 
 
 #define LOWER 1500
+
+
+#define LAST_THREAD 32
+
 
 
 //******************************************************************************
@@ -106,8 +120,16 @@ static void benchmark1(int thread_count) {
     // clock end
     clock_t end = clock();
     // print time
-    double benchmark1_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    printf("benchmark1: threads: %d, time: %f\n", thread_count, benchmark1_time);
+    double benchmark_time = ((double) (end - start)) / CLOCKS_PER_SEC;
+    if (!DEBUG) {
+        if (thread_count != LAST_THREAD) {
+            printf("%f, ", benchmark_time);
+        } else {
+            printf("%f", benchmark_time);
+        }
+    } else {
+        debug_print("threads: %d, time: %f\n", thread_count, benchmark_time);
+    }
 }
 
 
@@ -150,8 +172,16 @@ static void benchmark2(int thread_count) {
     // clock end
     clock_t end = clock();
     // print time
-    double benchmark2_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    printf("benchmark2: threads: %d, time: %f\n", thread_count, benchmark2_time);
+    double benchmark_time = ((double) (end - start)) / CLOCKS_PER_SEC;
+    if (!DEBUG) {
+        if (thread_count != LAST_THREAD) {
+            printf("%f, ", benchmark_time);
+        } else {
+            printf("%f", benchmark_time);
+        }
+    } else {
+        debug_print("threads: %d, time: %f\n", thread_count, benchmark_time);
+    }
 }
 
 
@@ -196,8 +226,16 @@ static void benchmark3(int thread_count) {
     // clock end
     clock_t end = clock();
     // print time
-    double benchmark3_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    printf("benchmark3: threads: %d, time: %f\n", thread_count, benchmark3_time);
+    double benchmark_time = ((double) (end - start)) / CLOCKS_PER_SEC;
+    if (!DEBUG) {
+        if (thread_count != LAST_THREAD) {
+            printf("%f, ", benchmark_time);
+        } else {
+            printf("%f", benchmark_time);
+        }
+    } else {
+        debug_print("threads: %d, time: %f\n", thread_count, benchmark_time);
+    }
 }
 
 
@@ -247,8 +285,16 @@ static void benchmark4(int thread_count) {
     // clock end
     clock_t end = clock();
     // print time
-    double benchmark4_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    printf("benchmark2: threads: %d, time: %f\n", thread_count, benchmark4_time);
+    double benchmark_time = ((double) (end - start)) / CLOCKS_PER_SEC;
+    if (!DEBUG) {
+        if (thread_count != LAST_THREAD) {
+            printf("%f, ", benchmark_time);
+        } else {
+            printf("%f", benchmark_time);
+        }
+    } else {
+        debug_print("threads: %d, time: %f\n", thread_count, benchmark_time);
+    }
 }
 
 
@@ -294,8 +340,16 @@ static void benchmark5(int thread_count) {
     // clock end
     clock_t end = clock();
     // print time
-    double benchmark5_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    printf("benchmark5: threads: %d, time: %f\n", thread_count, benchmark5_time);
+    double benchmark_time = ((double) (end - start)) / CLOCKS_PER_SEC;
+    if (!DEBUG) {
+        if (thread_count != LAST_THREAD) {
+            printf("%f, ", benchmark_time);
+        } else {
+            printf("%f", benchmark_time);
+        }
+    } else {
+        debug_print("threads: %d, time: %f\n", thread_count, benchmark_time);
+    }
 }
 
 
@@ -310,31 +364,36 @@ void split_ordered_list_benchmark () {
     // seeding so that different random sequences get generated
     srand (time(NULL));
 
-    printf("Benchmark 1: 50%% inserts, 0%% finds, 50%% deletes\n====================================================\n");
+    debug_print("Benchmark 1: 50%% inserts, 0%% finds, 50%% deletes\n====================================================\n");
+    printf("\n");
     for (int t=1; t <=32; t*=2) {
         htab = hashtable_initialize();
         benchmark1(t);
         hashtable_destroy(htab);
     }
-    printf("\nBenchmark 2: 33%% inserts, 33%% finds, 33%% deletes\n====================================================\n");
+    debug_print("\nBenchmark 2: 33%% inserts, 33%% finds, 33%% deletes\n====================================================\n");
+    printf("\n");
     for (int t=1; t <=32; t*=2) {
         htab = hashtable_initialize();
         benchmark2(t);
         hashtable_destroy(htab);
     }
-    printf("\nBenchmark 3: 25%% inserts, 50%% finds, 25%% deletes\n====================================================\n");
+    debug_print("\nBenchmark 3: 25%% inserts, 50%% finds, 25%% deletes\n====================================================\n");
+    printf("\n");
     for (int t=1; t <=32; t*=2) {
         htab = hashtable_initialize();
         benchmark3(t);
         hashtable_destroy(htab);
     }
-    printf("\nBenchmark 4: 15%% inserts, 70%% finds, 15%% deletes\n====================================================\n");
+    debug_print("\nBenchmark 4: 15%% inserts, 70%% finds, 15%% deletes\n====================================================\n");
+    printf("\n");
     for (int t=1; t <=32; t*=2) {
         htab = hashtable_initialize();
         benchmark4(t);
         hashtable_destroy(htab);
     }
-    printf("\nBenchmark 5: 5%% inserts, 90%% finds, 5%% deletes\n====================================================\n");
+    debug_print("\nBenchmark 5: 5%% inserts, 90%% finds, 5%% deletes\n====================================================\n");
+    printf("\n");
     for (int t=1; t <=32; t*=2) {
         htab = hashtable_initialize();
         benchmark5(t);

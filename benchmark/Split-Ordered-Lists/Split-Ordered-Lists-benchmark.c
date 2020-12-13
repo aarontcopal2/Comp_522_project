@@ -11,7 +11,7 @@
 // type definitions
 //******************************************************************************
 
-#define DEBUG 0
+#define DEBUG 1
 #define debug_print(fmt, ...) \
     do { if (DEBUG) fprintf(stderr, fmt, ##__VA_ARGS__); } while (0)
 
@@ -353,7 +353,7 @@ static void benchmark5(int thread_count) {
 //******************************************************************************
 
 void split_ordered_list_benchmark () {
-    htab = hashtable_initialize();
+    // htab = hashtable_initialize();
 
     // seeding so that different random sequences get generated
     srand (time(NULL));

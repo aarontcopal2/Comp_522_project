@@ -204,7 +204,7 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
 }
 
 
-static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
+static void local_scan_for_reclaimable_nodes(hashtable *htab, hazard_ptr_node *hp_head) {
     // stage1: Scan hp_head list and insert all non-null nodes to private hashtable phtable
     debug_print("local_scan_for_reclaimable_nodes\n");
     hazard_ptr_node *hp_ref = hp_head;
@@ -261,6 +261,7 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
         }
         current = next;
     }
+    update_global_splay_tree_pointer(htab);
 }
 
 
@@ -329,7 +330,7 @@ void retire_node(hashtable *htab, NodeType *node) {
     local_retired_node_count++;
 
     if (local_retired_node_count >= RETIRE_THRESHOLD) {
-        local_scan_for_reclaimable_nodes(atomic_load(&htab->hp_head));
+        local_scan_for_reclaimable_nodes(htab, atomic_load(&htab->hp_head));
         global_scan_for_reclaimable_nodes();
     }
 }

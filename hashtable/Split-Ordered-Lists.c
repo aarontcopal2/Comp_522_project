@@ -419,6 +419,35 @@ static void free_hazard_pointers(hazard_ptr_node * start_hp, uint hp_count) {
 }
 
 
+static void free_splay_tree(splay_entry_t *node) {
+    // we dont want to delete the root
+    if (node == NULL) {
+        return;
+    }
+
+    /* first recur on left child */
+    free_splay_tree(node->left);
+
+    /* now recur on right child */
+    free_splay_tree(node->right);
+
+    // freeing the node
+    free(node);
+}
+
+
+static void free_all_splay_trees(splay_tree_pointer *stp) {
+    splay_tree_pointer *st_ref = stp, *next;
+    while (st_ref) {
+        splay_entry_t *root = st_ref->root;
+        free_splay_tree(root);
+        next = atomic_load(&st_ref->next);
+        free(st_ref);
+        st_ref = next;
+    }
+}
+
+
 
 //******************************************************************************
 // interface operations
@@ -480,10 +509,13 @@ void hashtable_destroy(hashtable *htab) {
     // free_retired_nodes(rl_head);
 
     // free hazard pointers
-    // hazard_ptr_node *start_hp = atomic_load(&htab->hp_head);
-    // uint hp_count = atomic_load_explicit(&htab->hazard_pointers_count, memory_order_relaxed);
-    // free_hazard_pointers(start_hp, hp_count);
-    
+    hazard_ptr_node *start_hp = atomic_load(&htab->hp_head);
+    uint hp_count = atomic_load_explicit(&htab->hazard_pointers_count, memory_order_relaxed);
+    free_hazard_pointers(start_hp, hp_count);
+
+    // free splay trees
+    free_all_splay_trees(atomic_load(&htab->spt_head));
+
     // free child segments
     for (int i = 0; i < size; i++) {
         free(ST[i]);

@@ -16,6 +16,7 @@
 #include "splay-tree/splay-uint64.h"
 #include "channel/lib/prof-lean/spinlock.h"
 #include "channel/hpcrun/gpu/gpu-splay-allocator.h"
+#include "channel/hashtable-memory-manager.h"
 #include "Micheal-splay-tree.h"
 
 
@@ -23,41 +24,6 @@
 //******************************************************************************
 // splay-tree definitions
 //******************************************************************************
-
-#define st_insert				\
-    typed_splay_insert(int)
-
-#define st_lookup				\
-    typed_splay_lookup(int)
-
-#define st_delete				\
-    typed_splay_delete(int)
-
-#define st_forall				\
-    typed_splay_forall(int)
-
-#define st_count				\
-    typed_splay_count(int)
-
-#define st_alloc(free_list) \
-    typed_splay_alloc(free_list, splay_entry_t)
-
-#define st_free(free_list, node) \
-    typed_splay_free(free_list, node)
-
-
-#undef typed_splay_node
-#define typed_splay_node(int) splay_entry_t
-
-// we have a special case where we only need to search for keys,
-// we are not concerned with the value. Can we remove the value parameter from the struct?
-typedef struct typed_splay_node(int) {
-    struct typed_splay_node(int) *left;
-    struct typed_splay_node(int) *right;
-    uint64_t key;
-    uint64_t val;
-} typed_splay_node(int);
-
 
 typed_splay_impl(int)
 
@@ -72,6 +38,9 @@ static __thread splay_entry_t *splay_free_list = NULL;
 
 
 static __thread spinlock_t splay_lock = SPINLOCK_UNLOCKED;
+
+
+static __thread splay_tree_pointer *local_spt_head;
 
 
 
@@ -113,7 +82,7 @@ static void free_splay_tree(splay_entry_t *node, int delete_root) {
     /* now recur on right child */
     free_splay_tree(node->right, delete_root);
 
-    if (node == splay_root && !delete_root) {
+    if (node == splay_root) {
         splay_root = NULL;
     }
     // freeing the node
@@ -194,4 +163,38 @@ splay_entry_val_get
 void
 clear_micheal_splay_tree(int delete_root) {
     free_splay_tree(splay_root, delete_root);
+}
+
+
+static void add_entry_to_global_splay_tree_pointer(hashtable *htab) {
+    splay_tree_pointer *null_spt = NULL;
+
+    if (atomic_compare_exchange_strong(&htab->spt_head, &null_spt, local_spt_head)) {
+        atomic_compare_exchange_strong(&htab->spt_tail, &null_spt, local_spt_head);
+    } else {
+        try_again: ;
+        splay_tree_pointer *current_tail = atomic_load(&htab->spt_tail);
+        if (current_tail == NULL) {
+            goto try_again;
+        }
+        if(atomic_compare_exchange_strong(&htab->spt_tail, &current_tail, local_spt_head)) {
+            // adding this helgrind annotation because we are always CAS'ing a NULL pointer
+            VALGRIND_HG_DISABLE_CHECKING(&current_tail->next, sizeof(splay_tree_pointer));
+            atomic_store(&current_tail->next, local_spt_head);
+            VALGRIND_HG_ENABLE_CHECKING(&current_tail->next, sizeof(splay_tree_pointer));
+        } else {
+            goto try_again;
+        }
+    }
+}
+
+
+void update_global_splay_tree_pointer(hashtable *htab) {
+    if (!local_spt_head) {
+        local_spt_head = malloc(sizeof(splay_tree_pointer));
+        local_spt_head->root = splay_root;
+        add_entry_to_global_splay_tree_pointer(htab);
+    } else {
+        local_spt_head->root = splay_root;
+    }
 }

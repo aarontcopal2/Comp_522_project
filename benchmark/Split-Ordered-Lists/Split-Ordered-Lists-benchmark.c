@@ -24,12 +24,6 @@
 hashtable *htab;
 
 
-#define LOWER 1500
-
-
-#define LAST_THREAD 32
-
-
 
 //******************************************************************************
 // private operations

@@ -208,6 +208,8 @@ static void local_scan_for_reclaimable_nodes(hazard_ptr_node *hp_head) {
     // stage1: Scan hp_head list and insert all non-null nodes to private hashtable phtable
     debug_print("local_scan_for_reclaimable_nodes\n");
     hazard_ptr_node *hp_ref = hp_head;
+    clear_micheal_splay_tree(0);
+
     while (hp_ref) {
         NodeType *hp = atomic_load_explicit(&hp_ref->hp, memory_order_acquire);
         hazard_ptr_node *next = atomic_load_explicit(&hp_ref->next, memory_order_acquire);

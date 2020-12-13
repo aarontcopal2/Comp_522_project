@@ -476,13 +476,13 @@ void hashtable_destroy(hashtable *htab) {
     free_all_nodes(start_node);
 
     // free retired nodes
-    retired_list_node *rl_head = atomic_load(&htab->rl_head);
-    free_retired_nodes(rl_head);
+    // retired_list_node *rl_head = atomic_load(&htab->rl_head);
+    // free_retired_nodes(rl_head);
 
     // free hazard pointers
-    hazard_ptr_node *start_hp = atomic_load(&htab->hp_head);
-    uint hp_count = atomic_load_explicit(&htab->hazard_pointers_count, memory_order_relaxed);
-    free_hazard_pointers(start_hp, hp_count);
+    // hazard_ptr_node *start_hp = atomic_load(&htab->hp_head);
+    // uint hp_count = atomic_load_explicit(&htab->hazard_pointers_count, memory_order_relaxed);
+    // free_hazard_pointers(start_hp, hp_count);
     
     // free child segments
     for (int i = 0; i < size; i++) {

@@ -9,7 +9,7 @@ splay_benchmark = []
 sol_benchmark = []
 
 
-with open('output.csv', 'r') as fd:
+with open('performance_input.csv', 'r') as fd:
     reader = csv.reader(fd)
     for idx, row in enumerate(reader):
         if idx < 5:

@@ -261,8 +261,7 @@ static void local_scan_for_reclaimable_nodes(hashtable *htab, hazard_ptr_node *h
         }
         current = next;
     }
-    clear_micheal_splay_tree(0);
-    // update_global_splay_tree_pointer(htab);
+    clear_micheal_splay_tree();
 }
 
 

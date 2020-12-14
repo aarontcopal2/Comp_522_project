@@ -121,22 +121,6 @@ struct __rl_node {
   _Atomic(retired_list_node*) next;
 };
 
-/* typedef struct __spe_t splay_entry_duplicate_t;
-
-struct __spe_t{
-    splay_entry_duplicate_t *left;
-    splay_entry_duplicate_t *right;
-    uint64_t key;
-    uint64_t val;
-}; */
-
-typedef struct __stp_node splay_tree_pointer;
-
-struct __stp_node {
-    splay_entry_t* root;
-    _Atomic(splay_tree_pointer*) next;
-};
-
 
 typedef struct sol_ht_object_details_t {
   union {
@@ -172,9 +156,6 @@ struct hashtable {
     atomic_size_t next_move_block;
     atomic_size_t num_moved_blocks;
     pthread_rwlock_t resize_rwl;
-
-    _Atomic(splay_tree_pointer *) spt_head;
-    _Atomic(splay_tree_pointer *) spt_tail;
 
     _Atomic(hazard_ptr_node *) hp_head;
     _Atomic(hazard_ptr_node *) hp_tail;

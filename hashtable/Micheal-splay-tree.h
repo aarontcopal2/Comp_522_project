@@ -82,14 +82,7 @@ splay_entry_val_get
 void
 clear_micheal_splay_tree
 (
-    int delete_root
-);
-
-
-void
-update_global_splay_tree_pointer
-(
-    hashtable *htab
+    void
 );
 
 #endif  // MICHEAL_SPLAY_TREE_H

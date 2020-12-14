@@ -347,8 +347,6 @@ static void resize_primary(hashtable *htab) {
 
 
 static void resize_hashtable(hashtable *htab) {
-    debug_print("resize_hashtable()\n");
-
     /* resizing requires mallocing a new memory region and copying old values to this new region and swapping the data structure pointers
     * This operation needs to be atomic, else we may loose some insertions happening between memcpy and swapping of old table with new
     * there will be 3 helper functions for atomic resizing: resize_primary, resize_replica, resize_task
@@ -550,8 +548,6 @@ void print_hashtable(hashtable *htab) {
 
 
 bool map_insert(hashtable *htab, t_key key, val_t val) {
-    debug_print("map_insert: %u\n", key);
-
     // if a resize is in progress(initiated by another thread), block operations and make current thread a resize helper
     while (pthread_rwlock_tryrdlock(&htab->resize_rwl) != 0) {
         resize_replica(htab);
@@ -582,7 +578,6 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
     // node->sol_obj_ref = sol_obj;
     atomic_init(&node->next, NULL);
     
-    // do we need to save the hash inside the node?
 
     // list_insert will fail if the key already exists
     if (!list_insert(htab, &bucket_ptr, node)) {
@@ -593,6 +588,7 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
 
     pthread_rwlock_unlock(&htab->resize_rwl);
     // if insertion is succesful, increment the count of nodes.
+
     // If the load factor of the hashtable > MAX_LOAD, resize the hash table
     size_t count = fetch_and_increment_count(htab);
     size_t size = atomic_load(&htab->size);
@@ -604,7 +600,6 @@ bool map_insert(hashtable *htab, t_key key, val_t val) {
 }
 
 
-// need to return value
 val_t map_search(hashtable *htab, t_key key) {
     // if a resize is in progress(initiated by another thread), block operations and make current thread a resize helper
     while (pthread_rwlock_tryrdlock(&htab->resize_rwl) != 0) {
@@ -622,6 +617,7 @@ val_t map_search(hashtable *htab, t_key key) {
         }
     }
 
+    // find node in linked-list with corresponding key
     MarkPtrType result = list_search(htab, &bucket_ptr, so_regular_key(key));
     pthread_rwlock_unlock(&htab->resize_rwl);
     if (result && result->val) {
@@ -647,13 +643,17 @@ bool map_delete(hashtable *htab, t_key key) {
             goto try_again;
         }
     }
+
+    // delete node in linked-list with corresponding key
     if (!list_delete(htab, &bucket_ptr, so_regular_key(key))) {
+        // node doesnt exist in the list, release lock and return false
         pthread_rwlock_unlock(&htab->resize_rwl);
         return false;
     }
 
     // if deletion is succesful, decrement the count of nodes.
     fetch_and_decrement_count(htab);
+    // release lock and return true
     pthread_rwlock_unlock(&htab->resize_rwl);
     return true;
 }

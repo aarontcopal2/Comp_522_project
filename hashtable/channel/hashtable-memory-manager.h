@@ -83,7 +83,8 @@ typedef void* val_t;
 typedef struct __node NodeType;
 
 
-//what is a markable pointer type
+// MarkPtrType will be used as a tagged pointer
+// the last bit will be used to mark the node for deletion
 typedef NodeType* MarkPtrType;
 
 

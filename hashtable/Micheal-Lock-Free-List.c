@@ -302,16 +302,12 @@ static void update_global_retired_list(hashtable *htab, retired_list_node *local
 // interface operations
 //******************************************************************************
 
-// retired nodes are nodes marked for deletion, but cant be freed/reused unless checked
+// retired nodes are nodes marked for deletion, but cant be freed/reused unless made sure that no other thread is using it
 void retire_node(hashtable *htab, NodeType *node) {
-    debug_print("retiring node: %u\n", node->key);
-    /* In the paper, RETIRE_THRESHOLD = H + omega(H); where H is total no. of hazard pointers
-    * what is omega(H)? Shouldnt RETIRE_THRESHOLD < H and not >= H? 
-    * RETIRE_THRESHOLD should be small so that unneeded nodes are removed on regular basis
+    /* RETIRE_THRESHOLD should be small so that unneeded nodes are removed on regular basis
     * large threshold values will cause problems in case of idle threads */
     uint RETIRE_THRESHOLD = atomic_load_explicit(&htab->hazard_pointers_count, memory_order_acquire) + 10;
 
-    // can we safely change the next pointer of node to null?
     VALGRIND_HG_DISABLE_CHECKING(&node->next, sizeof(NodeType));
     atomic_store(&node->next, NULL);
     VALGRIND_HG_ENABLE_CHECKING(&node->next, sizeof(NodeType));
@@ -350,12 +346,12 @@ MarkPtrType list_search(hashtable *htab, MarkPtrType *head, so_key_t key) {
 
 
 bool list_insert(hashtable *htab, MarkPtrType *head, NodeType *node) {
-    debug_print("list_insert: %p\n", node);
     bool result;
     MarkPtrType cur, *prev;
     so_key_t so_key = node->so_key;
 
     while (true) {
+        // find the insertion position for the new element in the list
         cur = list_find(htab, head, so_key, &prev);
         if (cur && cur->so_key == so_key) {
             // if a key is already present, we return
@@ -386,8 +382,10 @@ bool list_delete(hashtable *htab, MarkPtrType *head, so_key_t key) {
     NodeType *cur, *next;
 
     while (true) {
+        // find the position of the element in the list
         cur = list_find(htab, head, key, &prev);
         if (!cur || cur->so_key != key) {
+            // exit if element not found
             result = false;
             break;
         }
@@ -408,11 +406,14 @@ bool list_delete(hashtable *htab, MarkPtrType *head, so_key_t key) {
         // expected: prev points to cur and prev is not marked for deletion
         expected = create_mark_pointer(cur, 0);
         desired = create_mark_pointer(next, 0);
+
         // if expected matches, make prev point to next
         if (atomic_compare_and_swap(prev, expected, desired)) {
+            // free the deleted node
             retire_node(htab, cur);
         } else {
-            list_find(htab, head, key, &prev); // Note: Kumpera implementation commented this
+            // some other thread has changed prev (either marked it for deletion or inserted another element)
+            list_find(htab, head, key, &prev);
         }
         result = true;
         break;

@@ -379,9 +379,11 @@ static void free_all_nodes(NodeType *start_node) {
     while(node) {
         next = atomic_load(&node->next);
         if (node != NULL && next) {
+            // node = (uintptr_t)node & (uintptr_t)(~(0x1));
             free(node);
             node = next;
         } else {
+            // node = (uintptr_t)node & (uintptr_t)(~(0x1));
             free(node);
             break;
         }
@@ -396,7 +398,7 @@ static void free_retired_nodes(retired_list_node *rl_head) {
         NodeType *thread_rl_head = rl_ref->thread_retired_list_head;
         free_all_nodes(thread_rl_head);
         next = atomic_load(&rl_ref->next);
-        rl_ref = (uintptr_t)rl_ref & (uintptr_t)(~(0x1));
+        // rl_ref = (uintptr_t)rl_ref & (uintptr_t)(~(0x1));
         free(rl_ref);
         rl_ref = next;
     }
@@ -476,8 +478,8 @@ void hashtable_destroy(hashtable *htab) {
     free_all_nodes(start_node);
 
     // free retired nodes
-    // retired_list_node *rl_head = atomic_load(&htab->rl_head);
-    // free_retired_nodes(rl_head);
+    retired_list_node *rl_head = atomic_load(&htab->rl_head);
+    free_retired_nodes(rl_head);
 
     // free hazard pointers
     hazard_ptr_node *start_hp = atomic_load(&htab->hp_head);

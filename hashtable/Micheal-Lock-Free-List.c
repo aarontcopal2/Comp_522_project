@@ -46,6 +46,7 @@ __thread hazard_ptr_node *local_hp_head;
 __thread NodeType *local_retired_list_head;
 __thread NodeType *local_retired_list_tail;
 __thread uint local_retired_node_count = 0;
+__thread retired_list_node *rl_head_reference_for_thread;
 
 
 
@@ -206,7 +207,6 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
 
 static void local_scan_for_reclaimable_nodes(hashtable *htab, hazard_ptr_node *hp_head) {
     // stage1: Scan hp_head list and insert all non-null nodes to private hashtable phtable
-    debug_print("local_scan_for_reclaimable_nodes\n");
     hazard_ptr_node *hp_ref = hp_head;
 
     while (hp_ref) {
@@ -244,13 +244,15 @@ static void local_scan_for_reclaimable_nodes(hashtable *htab, hazard_ptr_node *h
             // sol_ht_free(parent_obj);
             if (current == local_retired_list_head) {
                 local_retired_list_head = next;
+                rl_head_reference_for_thread->thread_retired_list_head = next;
             }
             if (current != prev_node_not_deleted) {
                 atomic_store(&prev_node_not_deleted->next, next);
             } else {
                 prev_node_not_deleted = next;
             }
-            atomic_store(&current->next, NULL);
+            // atomic_store(&current->next, NULL);
+            current = (uintptr_t)current & (uintptr_t)(~(0x1));
             free(current);
             local_retired_node_count--;
             /* what do we do with nodes that are safe for reclamation? We can push such nodes to 
@@ -310,6 +312,7 @@ void retire_node(hashtable *htab, NodeType *node) {
         local_retired_list_head = node;
         local_retired_list_tail = node;
         retired_list_node *rln = malloc(sizeof(retired_list_node));
+        rl_head_reference_for_thread = rln;
         rln->thread_retired_list_head = local_retired_list_head;
         atomic_store(&rln->next, NULL);
         update_global_retired_list(htab, rln);

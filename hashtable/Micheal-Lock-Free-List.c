@@ -208,7 +208,6 @@ static void local_scan_for_reclaimable_nodes(hashtable *htab, hazard_ptr_node *h
     // stage1: Scan hp_head list and insert all non-null nodes to private hashtable phtable
     debug_print("local_scan_for_reclaimable_nodes\n");
     hazard_ptr_node *hp_ref = hp_head;
-    clear_micheal_splay_tree(0);
 
     while (hp_ref) {
         NodeType *hp = atomic_load_explicit(&hp_ref->hp, memory_order_acquire);
@@ -251,6 +250,7 @@ static void local_scan_for_reclaimable_nodes(hashtable *htab, hazard_ptr_node *h
             } else {
                 prev_node_not_deleted = next;
             }
+            atomic_store(&current->next, NULL);
             free(current);
             local_retired_node_count--;
             /* what do we do with nodes that are safe for reclamation? We can push such nodes to 
@@ -261,16 +261,8 @@ static void local_scan_for_reclaimable_nodes(hashtable *htab, hazard_ptr_node *h
         }
         current = next;
     }
-    update_global_splay_tree_pointer(htab);
-}
-
-
-static void global_scan_for_reclaimable_nodes() {
-    /* completed/idle threads may leave behind hazard pointer nodes and elements in
-    * their local_retired_list_head. global_scan_for_reclaimable_nodes should identify such nodes and remove them.
-    * 
-    * Can we identify a thread is complete and its hazard pointer head, freelist and
-    * rlist can be reused */
+    clear_micheal_splay_tree(0);
+    // update_global_splay_tree_pointer(htab);
 }
 
 
@@ -327,7 +319,6 @@ void retire_node(hashtable *htab, NodeType *node) {
 
     if (local_retired_node_count >= RETIRE_THRESHOLD) {
         local_scan_for_reclaimable_nodes(htab, atomic_load(&htab->hp_head));
-        global_scan_for_reclaimable_nodes();
     }
 }
 

@@ -396,6 +396,7 @@ static void free_retired_nodes(retired_list_node *rl_head) {
         NodeType *thread_rl_head = rl_ref->thread_retired_list_head;
         free_all_nodes(thread_rl_head);
         next = atomic_load(&rl_ref->next);
+        rl_ref = (uintptr_t)rl_ref & (uintptr_t)(~(0x1));
         free(rl_ref);
         rl_ref = next;
     }
@@ -409,6 +410,7 @@ static void free_hazard_pointers(hazard_ptr_node * start_hp, uint hp_count) {
     while (hp_count != 0) {
         // hazard pointer is initialized as an array of size 3. The next thread's hazard pointer is thus linked to hp[2].next
         next = atomic_load(&hp[2].next);
+        hp = (uintptr_t)hp & (uintptr_t)(~(0x1));
         free(hp);
         hp = next;
         // each hp is an array of size 3
@@ -512,7 +514,7 @@ void hashtable_destroy(hashtable *htab) {
     free_hazard_pointers(start_hp, hp_count);
 
     // free splay trees
-    free_all_splay_trees(atomic_load(&htab->spt_head));
+    // free_all_splay_trees(atomic_load(&htab->spt_head));
 
     // free child segments
     for (int i = 0; i < size; i++) {

@@ -37,14 +37,24 @@ hashtable *htab;
 // private operations
 //******************************************************************************
 
-static void initial_hashtable_population() {
+static void *add_initial_elements(void *arg) {
     // initializing the hash table with 1.5k elements
     bool status;
+    t_key key, temp_val;
+    val_t val;
+
     for (int i = 0; i < LOWER; i++) {
-        uint64_t key = i;
-        uint64_t val = key >> 1;
+        key = i;
+        temp_val = key >> 1;
+        val = (void*)&temp_val;
         status = map_insert(htab, key, val);
     }
+}
+
+static void initial_hashtable_population() {
+    pthread_t thr;
+    pthread_create(&thr, NULL, add_initial_elements, NULL);
+    pthread_join(thr, NULL);
 }
 
 

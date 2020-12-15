@@ -33,7 +33,7 @@
 //******************************************************************************
 
 static void initialize_splay_tree() {
-    // initializing the splay tree with 1k elements
+    // initializing the splay tree with 1.5k elements
     for (int i = 0; i < LOWER; i++) {
         uint64_t key = i;
         uint64_t val = key >> 1;

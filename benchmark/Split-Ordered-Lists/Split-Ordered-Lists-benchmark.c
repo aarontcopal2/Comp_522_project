@@ -37,6 +37,17 @@ hashtable *htab;
 // private operations
 //******************************************************************************
 
+static void initial_hashtable_population() {
+    // initializing the hash table with 1.5k elements
+    bool status;
+    for (int i = 0; i < LOWER; i++) {
+        uint64_t key = i;
+        uint64_t val = key >> 1;
+        status = map_insert(htab, key, val);
+    }
+}
+
+
 static uint64_t random_key() {
     return (rand() % 
            (UPPER - LOWER)) + LOWER;
@@ -223,6 +234,7 @@ void split_ordered_list_benchmark () {
     printf("\n");
     for (int t=1; t <= LAST_THREAD; t*=2) {
         htab = hashtable_initialize();
+        initial_hashtable_population();
         benchmark(1, t);
         hashtable_destroy(htab);
     }
@@ -230,6 +242,7 @@ void split_ordered_list_benchmark () {
     printf("\n");
     for (int t=1; t <= LAST_THREAD; t*=2) {
         htab = hashtable_initialize();
+        initial_hashtable_population();
         benchmark(2, t);
         hashtable_destroy(htab);
     }
@@ -237,6 +250,7 @@ void split_ordered_list_benchmark () {
     printf("\n");
     for (int t=1; t <= LAST_THREAD; t*=2) {
         htab = hashtable_initialize();
+        initial_hashtable_population();
         benchmark(3, t);
         hashtable_destroy(htab);
     }
@@ -244,6 +258,7 @@ void split_ordered_list_benchmark () {
     printf("\n");
     for (int t=1; t <= LAST_THREAD; t*=2) {
         htab = hashtable_initialize();
+        initial_hashtable_population();
         benchmark(4, t);
         hashtable_destroy(htab);
     }
@@ -251,6 +266,7 @@ void split_ordered_list_benchmark () {
     printf("\n");
     for (int t=1; t <= LAST_THREAD; t*=2) {
         htab = hashtable_initialize();
+        initial_hashtable_population();
         benchmark(5, t);
         hashtable_destroy(htab);
     }

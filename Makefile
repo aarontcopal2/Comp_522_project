@@ -2,7 +2,7 @@
 
 # hardcoding the gcc path for now, to show that gcc version 8.3.1 20191121 (Red Hat 8.3.1-5) (GCC) doesnt work
 CC=/home/atc8/software/spack/opt/spack/linux-centos8-skylake/gcc-8.3.1/gcc-8.3.0-vodp4hkmzrwqjb5m45xsb7syhgwzgv57/bin/gcc
-OPT=-O0 -g
+OPT=-O2 -g
 CXX_VERSION=
 LIBS=-latomic -lpthread
 BUILD_DIR=hashtable/build

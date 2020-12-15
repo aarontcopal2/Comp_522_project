@@ -181,7 +181,6 @@ static void *benchmark5_operations(void *arg) {
 
 
 static void benchmark(int benchmark_no, int thread_count) {
-    // 5% inserts, 90% finds, 5% deletes
     int iterations = ITERATION_SIZE / thread_count;
     pthread_t thr[thread_count];
 

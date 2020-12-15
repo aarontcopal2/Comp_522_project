@@ -66,37 +66,6 @@ static void *benchmark1_operations(void *arg) {
 }
 
 
-static void benchmark1(int thread_count) {
-    // 50% inserts, 0% finds, 50% deletes
-    int iterations = ITERATION_SIZE / thread_count;
-    pthread_t thr[thread_count];
-
-	// clock start
-    clock_t start = clock();
-
-    for (int i = 0; i < thread_count; i++) {
-        pthread_create(&thr[i], NULL, benchmark1_operations, &iterations);
-    }
-    for (int i = 0; i < thread_count; i++) {
-        pthread_join(thr[i], NULL);
-    }
-
-	// clock end
-    clock_t end = clock();
-    // print time
-    double benchmark_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    if (!DEBUG) {
-        if (thread_count != LAST_THREAD) {
-            printf("%f, ", benchmark_time);
-        } else {
-            printf("%f", benchmark_time);
-        }
-    } else {
-        debug_print("threads: %d, time: %f\n", thread_count, benchmark_time);
-    }
-}
-
-
 static void *benchmark2_operations(void *arg) {
     // 33% inserts, 33% finds, 33% deletes
     bool status;
@@ -112,37 +81,6 @@ static void *benchmark2_operations(void *arg) {
         test_splay_insert(key, val);
         result_val = test_splay_entry_val_get(key);
         test_splay_delete(key);
-    }
-}
-
-
-static void benchmark2(int thread_count) {
-    // 33% inserts, 33% finds, 33% deletes
-    int iterations = ITERATION_SIZE / thread_count;
-    pthread_t thr[thread_count];
-
-	// clock start
-    clock_t start = clock();
-
-    for (int i = 0; i < thread_count; i++) {
-        pthread_create(&thr[i], NULL, benchmark2_operations, &iterations);
-    }
-    for (int i = 0; i < thread_count; i++) {
-        pthread_join(thr[i], NULL);
-    }
-
-	// clock end
-    clock_t end = clock();
-    // print time
-    double benchmark_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    if (!DEBUG) {
-        if (thread_count != LAST_THREAD) {
-            printf("%f, ", benchmark_time);
-        } else {
-            printf("%f", benchmark_time);
-        }
-    } else {
-        debug_print("threads: %d, time: %f\n", thread_count, benchmark_time);
     }
 }
 
@@ -165,37 +103,6 @@ static void *benchmark3_operations(void *arg) {
         result_val1 = test_splay_entry_val_get(key1);
         result_val2 = test_splay_entry_val_get(key2);
         test_splay_delete(key1);
-    }
-}
-
-
-static void benchmark3(int thread_count) {
-    // 25% inserts, 50% finds, 25% deletes
-    int iterations = ITERATION_SIZE / thread_count;
-    pthread_t thr[thread_count];
-
-	// clock start
-    clock_t start = clock();
-
-    for (int i = 0; i < thread_count; i++) {
-        pthread_create(&thr[i], NULL, benchmark3_operations, &iterations);
-    }
-    for (int i = 0; i < thread_count; i++) {
-        pthread_join(thr[i], NULL);
-    }
-
-	// clock end
-    clock_t end = clock();
-    // print time
-    double benchmark_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    if (!DEBUG) {
-        if (thread_count != LAST_THREAD) {
-            printf("%f, ", benchmark_time);
-        } else {
-            printf("%f", benchmark_time);
-        }
-    } else {
-        debug_print("threads: %d, time: %f\n", thread_count, benchmark_time);
     }
 }
 
@@ -227,37 +134,6 @@ static void *benchmark4_operations(void *arg) {
 }
 
 
-static void benchmark4(int thread_count) {
-    // 15% inserts, 70% finds, 15% deletes
-    int iterations = ITERATION_SIZE / thread_count;
-    pthread_t thr[thread_count];
-
-	// clock start
-    clock_t start = clock();
-
-    for (int i = 0; i < thread_count; i++) {
-        pthread_create(&thr[i], NULL, benchmark4_operations, &iterations);
-    }
-    for (int i = 0; i < thread_count; i++) {
-        pthread_join(thr[i], NULL);
-    }
-
-	// clock end
-    clock_t end = clock();
-    // print time
-    double benchmark_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    if (!DEBUG) {
-        if (thread_count != LAST_THREAD) {
-            printf("%f, ", benchmark_time);
-        } else {
-            printf("%f", benchmark_time);
-        }
-    } else {
-        debug_print("threads: %d, time: %f\n", thread_count, benchmark_time);
-    }
-}
-
-
 static void *benchmark5_operations(void *arg) {
     // 5% inserts, 90% finds, 5% deletes
     bool status;
@@ -280,16 +156,37 @@ static void *benchmark5_operations(void *arg) {
 }
 
 
-static void benchmark5(int thread_count) {
-    // 5% inserts, 90% finds, 5% deletes
+static void benchmark(int benchmark_no, int thread_count) {
     int iterations = ITERATION_SIZE / thread_count;
     pthread_t thr[thread_count];
+
+    void *(*benchmark_fn_ptr)(void*);
+    switch (benchmark_no) {
+    case 1:
+        benchmark_fn_ptr = benchmark1_operations;
+        break;
+    case 2:
+        benchmark_fn_ptr = benchmark2_operations;
+        break;
+    case 3:
+        benchmark_fn_ptr = benchmark3_operations;
+        break;
+    case 4:
+        benchmark_fn_ptr = benchmark4_operations;
+        break;
+    case 5:
+        benchmark_fn_ptr = benchmark5_operations;
+        break;
+    default:
+        printf("benchmark not found\n");
+        break;
+    }
 
 	// clock start
     clock_t start = clock();
 
     for (int i = 0; i < thread_count; i++) {
-        pthread_create(&thr[i], NULL, benchmark5_operations, &iterations);
+        pthread_create(&thr[i], NULL, benchmark_fn_ptr, &iterations);
     }
     for (int i = 0; i < thread_count; i++) {
         pthread_join(thr[i], NULL);
@@ -321,37 +218,37 @@ void splay_tree_benchmark () {
     srand (time(NULL));
 
     debug_print("Benchmark 1: 50%% inserts, 0%% finds, 50%% deletes\n====================================================\n");
-    for (int t=1; t <=32; t*=2) {
+    for (int t=1; t <= LAST_THREAD; t*=2) {
         initialize_splay_tree();
-        benchmark1(t);
+        benchmark(1, t);
         clear_splay_tree(0);
     }
     debug_print("\nBenchmark 2: 33%% inserts, 33%% finds, 33%% deletes\n====================================================\n");
     printf("\n");
-    for (int t=1; t <=32; t*=2) {
+    for (int t=1; t <= LAST_THREAD; t*=2) {
         initialize_splay_tree();
-        benchmark2(t);
+        benchmark(2, t);
         clear_splay_tree(0);
     }
     debug_print("\nBenchmark 3: 25%% inserts, 50%% finds, 25%% deletes\n====================================================\n");
     printf("\n");
-    for (int t=1; t <=32; t*=2) {
+    for (int t=1; t <= LAST_THREAD; t*=2) {
         initialize_splay_tree();
-        benchmark3(t);
+        benchmark(3, t);
         clear_splay_tree(0);
     }
     debug_print("\nBenchmark 4: 15%% inserts, 70%% finds, 15%% deletes\n====================================================\n");
     printf("\n");
-    for (int t=1; t <=32; t*=2) {
+    for (int t=1; t <= LAST_THREAD; t*=2) {
         initialize_splay_tree();
-        benchmark4(t);
+        benchmark(4, t);
         clear_splay_tree(0);
     }
     debug_print("\nBenchmark 5: 5%% inserts, 90%% finds, 5%% deletes\n====================================================\n");
     printf("\n");
-    for (int t=1; t <=32; t*=2) {
+    for (int t=1; t <= LAST_THREAD; t*=2) {
         initialize_splay_tree();
-        benchmark5(t);
+        benchmark(5, t);
         clear_splay_tree(0);
     }
     clear_splay_tree(1);

@@ -89,9 +89,9 @@ static void update_global_hazard_pointer_list(hashtable *htab, hazard_ptr_node *
         if(atomic_compare_exchange_strong(&htab->hp_tail, &current_tail, &local_hp_head[2])) {
             // ANNOTATE_HAPPENS_AFTER(current_tail);
             ANNOTATE_HAPPENS_BEFORE(&current_tail->next);
-            // ANNOTATE_HAPPENS_AFTER(&current_tail->next);
+            VALGRIND_HG_DISABLE_CHECKING(&current_tail->next, sizeof(retired_list_node));
             atomic_store_explicit(&current_tail->next, local_hp_head, memory_order_release);
-            // ANNOTATE_HAPPENS_AFTER(&current_tail->next);
+            VALGRIND_HG_ENABLE_CHECKING(&current_tail->next, sizeof(retired_list_node));
         } else {
             goto try_again;
         }

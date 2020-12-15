@@ -353,42 +353,40 @@ static void benchmark5(int thread_count) {
 //******************************************************************************
 
 void split_ordered_list_benchmark () {
-    // htab = hashtable_initialize();
-
     // seeding so that different random sequences get generated
     srand (time(NULL));
 
     debug_print("Benchmark 1: 50%% inserts, 0%% finds, 50%% deletes\n====================================================\n");
     printf("\n");
-    for (int t=1; t <=32; t*=2) {
+    for (int t=1; t <= LAST_THREAD; t*=2) {
         htab = hashtable_initialize();
         benchmark1(t);
         hashtable_destroy(htab);
     }
     debug_print("\nBenchmark 2: 33%% inserts, 33%% finds, 33%% deletes\n====================================================\n");
     printf("\n");
-    for (int t=1; t <=32; t*=2) {
+    for (int t=1; t <= LAST_THREAD; t*=2) {
         htab = hashtable_initialize();
         benchmark2(t);
         hashtable_destroy(htab);
     }
     debug_print("\nBenchmark 3: 25%% inserts, 50%% finds, 25%% deletes\n====================================================\n");
     printf("\n");
-    for (int t=1; t <=32; t*=2) {
+    for (int t=1; t <= LAST_THREAD; t*=2) {
         htab = hashtable_initialize();
         benchmark3(t);
         hashtable_destroy(htab);
     }
     debug_print("\nBenchmark 4: 15%% inserts, 70%% finds, 15%% deletes\n====================================================\n");
     printf("\n");
-    for (int t=1; t <=32; t*=2) {
+    for (int t=1; t <= LAST_THREAD; t*=2) {
         htab = hashtable_initialize();
         benchmark4(t);
         hashtable_destroy(htab);
     }
     debug_print("\nBenchmark 5: 5%% inserts, 90%% finds, 5%% deletes\n====================================================\n");
     printf("\n");
-    for (int t=1; t <=32; t*=2) {
+    for (int t=1; t <= LAST_THREAD; t*=2) {
         htab = hashtable_initialize();
         benchmark5(t);
         hashtable_destroy(htab);

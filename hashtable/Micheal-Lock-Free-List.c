@@ -109,6 +109,7 @@ static hazard_ptr_node* get_thread_hazard_pointers(hashtable *htab) {
         hazard_ptr_node *hp = malloc(sizeof(hazard_ptr_node) * 3);
         atomic_store(&hp[0].next, &hp[1]);
         atomic_store(&hp[1].next, &hp[2]);
+        atomic_store(&hp[2].next, NULL);
         ANNOTATE_HAPPENS_BEFORE(&hp[2]);
         local_hp_head = hp;
 

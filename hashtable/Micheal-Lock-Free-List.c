@@ -185,7 +185,7 @@ static MarkPtrType list_find(hashtable *htab, NodeType **head, so_key_t so_key, 
                 if (ckey >= so_key) {
                     goto done;
                 }
-                prev = &get_node(cur)->next;
+                prev = (MarkPtrType*)&get_node(cur)->next;
                 // prev = &cn; 
                 set_hazard_pointer(htab, cur, 2);
             } else {
@@ -256,7 +256,7 @@ static void local_scan_for_reclaimable_nodes(hashtable *htab, hazard_ptr_node *h
                 prev_node_not_deleted = next;
             }
             // atomic_store(&current->next, NULL);
-            current = (uintptr_t)current & (uintptr_t)(~(0x1));
+            // current = (uintptr_t)current & (uintptr_t)(~(0x1));
             free(current);
             local_retired_node_count--;
             /* what do we do with nodes that are safe for reclamation? We can push such nodes to 

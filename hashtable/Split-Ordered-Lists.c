@@ -412,7 +412,7 @@ static void free_hazard_pointers(hazard_ptr_node * start_hp, uint hp_count) {
     while (hp_count != 0) {
         // hazard pointer is initialized as an array of size 3. The next thread's hazard pointer is thus linked to hp[2].next
         next = atomic_load(&hp[2].next);
-        hp = (uintptr_t)hp & (uintptr_t)(~(0x1));
+        // hp = (uintptr_t)hp & (uintptr_t)(~(0x1));
         free(hp);
         hp = next;
         // each hp is an array of size 3

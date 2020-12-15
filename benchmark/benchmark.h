@@ -28,8 +28,11 @@ typedef struct {
 #define ADDRESS_SIZE 2702
 
 
+#define UPPER 200000
+
+
 // ITERATION_SIZE is a multiple of 2 since the thread counts are a factor of 2
-#define ITERATION_SIZE 4096
+#define ITERATION_SIZE 256
 
 
 #define LOWER 1500

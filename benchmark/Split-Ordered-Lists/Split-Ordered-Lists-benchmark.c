@@ -39,48 +39,7 @@ hashtable *htab;
 
 static uint64_t random_key() {
     return (rand() % 
-           (ADDRESS_SIZE - LOWER)) + LOWER;
-}
-
-
-static void *small_hashtable_operations(void *arg) {
-    bool status;
-
-    uint t_index = pthread_self();
-    int index = *(int*)arg;
-    ANNOTATE_HAPPENS_BEFORE(arg);
-    
-    t_key key = index;
-    val_t val = (void*)&addrs[index];
-    status = map_insert(htab, key, val);
-    address *result_val = (address*) map_search(htab, index);
-    print_address(t_index, key, result_val);
-
-    status = map_delete(htab, key);
-
-    result_val = (address*) map_search(htab, key);
-    print_address(t_index, key, result_val);
-}
-
-
-static void *hashtable_operations(void *arg) {
-    bool status;
-    uint t_index = pthread_self();
-    int random_start_index = t_index % (ADDRESS_SIZE-20);
-
-    for (int i = 0; i < 20; i++) {
-        t_key key = random_start_index + i;
-        val_t val = (void*)&addrs[key];
-        status = map_insert(htab, key, val);
-
-        address *result_val = (address*) map_search(htab, key);
-        //print_address(t_index, key, result_val);
-
-        status = map_delete(htab, key);
-
-        result_val = (address*) map_search(htab, key);
-        //print_address(t_index, key, result_val);   
-    }
+           (UPPER - LOWER)) + LOWER;
 }
 
 
@@ -90,13 +49,13 @@ static void *benchmark1_operations(void *arg) {
     int iterations = *(int*)arg;
     iterations /= 2;
     
-    t_key key;
+    t_key key, temp_val;
     val_t val;
-    address *result_val;
 
     for (int i = 0; i < iterations; i++) {
         key = random_key();
-        val = (void*)&addrs[key];
+        temp_val = key >> 1;
+        val = (void*)&temp_val;
 
         status = map_insert(htab, key, val);
         status = map_delete(htab, key);
@@ -141,16 +100,16 @@ static void *benchmark2_operations(void *arg) {
     int iterations = *(int*)arg;
     iterations /= 3;
     
-    t_key key;
-    val_t val;
-    address *result_val;
+    t_key key, temp_val;
+    val_t val, result_val;
 
     for (int i = 0; i < iterations; i++) {
         key = random_key();
-        val = (void*)&addrs[key];
+        temp_val = key >> 1;
+        val = (void*)&temp_val;
 
         status = map_insert(htab, key, val);
-        result_val = (address*) map_search(htab, key);
+        result_val = map_search(htab, key);
         status = map_delete(htab, key);
     }
 }
@@ -193,18 +152,18 @@ static void *benchmark3_operations(void *arg) {
     int iterations = *(int*)arg;
     iterations /= 4;
     
-    t_key key1, key2;
-    val_t val;
-    address *result_val1, *result_val2;
+    t_key key1, key2, temp_val;
+    val_t val, result_val1, result_val2;
 
     for (int i = 0; i < iterations; i++) {
         key1 = random_key();
         key2 = random_key();
-        val = (void*)&addrs[key1];
+        temp_val = key1 >> 1;
+        val = (void*)&temp_val;
 
         status = map_insert(htab, key1, val);
-        result_val1 = (address*) map_search(htab, key1);
-        result_val2 = (address*) map_search(htab, key2);
+        result_val1 = map_search(htab, key1);
+        result_val2 = map_search(htab, key2);
         status = map_delete(htab, key1);
     }
 }
@@ -246,9 +205,8 @@ static void *benchmark4_operations(void *arg) {
     bool status;
     int iterations = *(int*)arg;
     
-    t_key key1, key2, key3, key4, key5;
-    val_t val;
-    address *result_val1, *result_val2, *result_val3, *result_val4, *result_val5;
+    t_key key1, key2, key3, key4, key5, temp_val;
+    val_t val, result_val1, result_val2, result_val3, result_val4, result_val5;
 
     for (int i = 0; i < iterations; i++) {
         key1 = random_key();
@@ -256,14 +214,15 @@ static void *benchmark4_operations(void *arg) {
         key3 = random_key();
         key4 = random_key();
         key5 = random_key();
-        val = (void*)&addrs[key1];
+        temp_val = key1 >> 1;
+        val = (void*)&temp_val;
 
         status = map_insert(htab, key1, val);
-        result_val1 = (address*) map_search(htab, key1);
-        result_val2 = (address*) map_search(htab, key2);
-        result_val3 = (address*) map_search(htab, key3);
-        result_val4 = (address*) map_search(htab, key4);
-        result_val5 = (address*) map_search(htab, key5);
+        result_val1 = map_search(htab, key1);
+        result_val2 = map_search(htab, key2);
+        result_val3 = map_search(htab, key3);
+        result_val4 = map_search(htab, key4);
+        result_val5 = map_search(htab, key5);
         status = map_delete(htab, key1);
     }
 }
@@ -305,20 +264,20 @@ static void *benchmark5_operations(void *arg) {
     bool status;
     int iterations = *(int*)arg;
     
-    t_key key;
-    val_t val;
-    address *result_val;
+    t_key key, temp_val;
+    val_t val, result_val;
 
     for (int i = 0; i < iterations; i++) {
         for (int j = 0; j < 17; j++) {
             key = random_key();
-            result_val = (address*) map_search(htab, key);
+            result_val = map_search(htab, key);
         }
         key = random_key();
-        val = (void*)&addrs[key];
+        temp_val = key >> 1;
+        val = (void*)&temp_val;
 
         status = map_insert(htab, key, val);
-        result_val = (address*) map_search(htab, key);
+        result_val = map_search(htab, key);
         status = map_delete(htab, key);
     }
 }

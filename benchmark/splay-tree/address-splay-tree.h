@@ -32,7 +32,7 @@ void
 address_splay_insert
 (
  uint64_t key,
- address *val
+ uint64_t val
 );
 
 
@@ -43,7 +43,7 @@ address_splay_delete
 );
 
 
-address*
+uint64_t
 address_splay_entry_val_get
 (
  uint64_t key

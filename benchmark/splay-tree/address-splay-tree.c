@@ -54,7 +54,7 @@ typedef struct typed_splay_node(int) {
     struct typed_splay_node(int) *left;
     struct typed_splay_node(int) *right;
     uint64_t key;
-    address *val;
+    uint64_t val;
 } typed_splay_node(int);
 
 
@@ -92,7 +92,7 @@ static address_splay_entry_t *
 address_splay_new
 (
     uint64_t key,
-    address *val
+    uint64_t val
 )
 {
     address_splay_entry_t *e = malloc(sizeof(address_splay_entry_t));
@@ -144,7 +144,7 @@ void
 address_splay_insert
 (
     uint64_t key,
-    address *val
+    uint64_t val
 )
 {
     if (address_splay_lookup(key)) {
@@ -177,7 +177,7 @@ address_splay_delete
 }
 
 
-address*
+uint64_t
 address_splay_entry_val_get
 (
     uint64_t key
@@ -185,7 +185,7 @@ address_splay_entry_val_get
 {
     address_splay_entry_t *e = address_splay_lookup(key);
     if (!e) {
-        return NULL;
+        return -1;
     }
     return e->val;
 }

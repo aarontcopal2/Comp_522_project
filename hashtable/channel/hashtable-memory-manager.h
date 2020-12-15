@@ -49,6 +49,8 @@
 //******************************************************************************
 
 #include <valgrind/helgrind.h>  // ANNOTATE_HAPPENS_AFTER, ANNOTATE_HAPPENS_BEFORE
+#include <stdbool.h>
+#include <pthread.h>
 
 
 
@@ -57,7 +59,7 @@
 //******************************************************************************
 
 #include "lib/prof-lean/bistack.h"
-#include "hpcrun/gpu/gpu-activity.h"
+// #include "hpcrun/gpu/gpu-activity.h"
 #include "../Micheal-splay-tree.h"
 
 

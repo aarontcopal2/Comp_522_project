@@ -6,7 +6,7 @@
 //******************************************************************************
 
 #include <stdint.h>
-#include <time.h>       // clock, clock_t
+#include <time.h>       // timespec
 #include <pthread.h>    // pthread_self, pthread_t, pthread_create, pthread_join
 
 
@@ -26,5 +26,16 @@
 
 
 #define LAST_THREAD 32
+
+
+
+//******************************************************************************
+// interface operations
+//******************************************************************************
+
+struct timespec timer_start();
+
+
+double timer_elapsed(struct timespec start_time);
 
 #endif      // benchmark_h

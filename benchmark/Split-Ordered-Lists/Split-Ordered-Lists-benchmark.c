@@ -187,7 +187,7 @@ static void benchmark(int benchmark_no, int thread_count) {
     }
 
     // clock start
-    clock_t start = clock();
+    struct timespec start = timer_start();
 
     for (int i = 0; i < thread_count; i++) {
         pthread_create(&thr[i], NULL, benchmark_fn_ptr, &iterations);
@@ -196,10 +196,8 @@ static void benchmark(int benchmark_no, int thread_count) {
         pthread_join(thr[i], NULL);
     }
 
-    // clock end
-    clock_t end = clock();
     // print time
-    double benchmark_time = ((double) (end - start)) / CLOCKS_PER_SEC;
+    double benchmark_time = timer_elapsed(start);
     if (!DEBUG) {
         if (thread_count != LAST_THREAD) {
             printf("%f, ", benchmark_time);

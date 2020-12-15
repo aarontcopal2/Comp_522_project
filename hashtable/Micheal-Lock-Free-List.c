@@ -39,7 +39,7 @@
 //******************************************************************************
 
 // variables for hazard pointers
-__thread hazard_ptr_node *local_hp_head;
+__thread hazard_ptr_node *local_hp_head = NULL;
 
 
 // variables for SMR
@@ -87,9 +87,11 @@ static void update_global_hazard_pointer_list(hashtable *htab, hazard_ptr_node *
             goto try_again;
         }
         if(atomic_compare_exchange_strong(&htab->hp_tail, &current_tail, &local_hp_head[2])) {
-            ANNOTATE_HAPPENS_AFTER(current_tail);
+            // ANNOTATE_HAPPENS_AFTER(current_tail);
             ANNOTATE_HAPPENS_BEFORE(&current_tail->next);
+            // ANNOTATE_HAPPENS_AFTER(&current_tail->next);
             atomic_store_explicit(&current_tail->next, local_hp_head, memory_order_release);
+            // ANNOTATE_HAPPENS_AFTER(&current_tail->next);
         } else {
             goto try_again;
         }
@@ -212,6 +214,7 @@ static void local_scan_for_reclaimable_nodes(hashtable *htab, hazard_ptr_node *h
 
     while (hp_ref) {
         NodeType *hp = atomic_load_explicit(&hp_ref->hp, memory_order_acquire);
+        // ANNOTATE_HAPPENS_BEFORE(&hp_ref->next);
         hazard_ptr_node *next = atomic_load_explicit(&hp_ref->next, memory_order_acquire);
         ANNOTATE_HAPPENS_AFTER(&hp_ref->next);
         // if hazard pointer is NULL, move to next reference

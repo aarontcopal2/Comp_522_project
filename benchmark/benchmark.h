@@ -19,7 +19,8 @@
 
 
 // ITERATION_SIZE is a multiple of 2 since the thread counts are a factor of 2
-#define ITERATION_SIZE 256
+#define ITERATION_SIZE 524288
+//4096, 32768, 524288 
 
 
 #define LOWER 1500

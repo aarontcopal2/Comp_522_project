@@ -33,8 +33,8 @@
 //******************************************************************************
 
 #define INITIAL_SEGMENTS 2
-#define SEGMENT_SIZE 2          // is SEGMENT_SIZE = 5 ok?
-#define MAX_LOAD 2              // is an average load of (5 nodes/bucket) fine?
+#define SEGMENT_SIZE 5          // is SEGMENT_SIZE = 5 ok?
+#define MAX_LOAD 5              // is an average load of (5 nodes/bucket) fine?
 
 
 #define NON_BLOCKING 0

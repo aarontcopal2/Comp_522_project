@@ -41,8 +41,8 @@
 //
 // ******************************************************* EndRiceCopyright *
 
-#ifndef SOL_HT_MEMORY_MANAGER_H
-#define SOL_HT_MEMORY_MANAGER_H
+#ifndef sol_ht_memory_manager_h
+#define sol_ht_memory_manager_h
 
 //******************************************************************************
 // system includes
@@ -184,4 +184,4 @@ sol_ht_free
  sol_ht_object_t *
 );
 
-#endif  // SOL_HT_MEMORY_MANAGER_H
+#endif  // sol_ht_memory_manager_h

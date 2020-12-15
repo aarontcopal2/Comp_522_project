@@ -1,5 +1,5 @@
-#ifndef SPLIT_ORDERED_LISTS_BENCHMARK_H
-#define SPLIT_ORDERED_LISTS_BENCHMARK_H
+#ifndef split_ordered_lists_benchmark_h
+#define split_ordered_lists_benchmark_h
 
 //******************************************************************************
 // interface operations
@@ -7,4 +7,4 @@
 
 void split_ordered_list_benchmark ();
 
-#endif // SPLIT_ORDERED_LISTS_BENCHMARK_H
+#endif // split_ordered_lists_benchmark_h

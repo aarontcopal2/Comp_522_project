@@ -1,5 +1,5 @@
-#ifndef MICHEAL_SPLAY_TREE_H
-#define MICHEAL_SPLAY_TREE_H
+#ifndef micheal_splay_tree_h
+#define micheal_splay_tree_h
 
 //************************ Forward Declarations ******************************
 
@@ -85,4 +85,4 @@ clear_micheal_splay_tree
     void
 );
 
-#endif  // MICHEAL_SPLAY_TREE_H
+#endif  // micheal_splay_tree_h

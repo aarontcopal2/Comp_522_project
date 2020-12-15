@@ -1,5 +1,5 @@
-#ifndef _SPLIT_ORDERED_LISTS_
-#define _SPLIT_ORDERED_LISTS_
+#ifndef _split_ordered_lists_
+#define _split_ordered_lists_
 
 //******************************************************************************
 // system includes
@@ -63,4 +63,4 @@ bool map_delete
     t_key key
 );
 
-#endif  //_SPLIT_ORDERED_LISTS_
+#endif  //_split_ordered_lists_

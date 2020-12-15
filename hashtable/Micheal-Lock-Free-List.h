@@ -1,5 +1,5 @@
-#ifndef _MICHEAL_LOCK_FREE_LIST_
-#define _MICHEAL_LOCK_FREE_LIST_
+#ifndef _micheal_lock_free_list_
+#define _micheal_lock_free_list_
 
 //******************************************************************************
 // system includes
@@ -54,4 +54,4 @@ bool list_delete
     so_key_t key
 );
 
-#endif  //_MICHEAL_LOCK_FREE_LIST_
+#endif  //_micheal_lock_free_list_

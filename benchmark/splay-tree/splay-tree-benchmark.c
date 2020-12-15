@@ -321,6 +321,9 @@ static void benchmark5(int thread_count) {
 //******************************************************************************
 
 void splay_tree_benchmark () {
+    // seeding so that different random sequences get generated
+    srand (time(NULL));
+
     debug_print("Benchmark 1: 50%% inserts, 0%% finds, 50%% deletes\n====================================================\n");
     for (int t=1; t <=32; t*=2) {
         initialize_splay_tree();

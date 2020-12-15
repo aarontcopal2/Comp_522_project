@@ -219,35 +219,34 @@ void splay_tree_benchmark () {
     for (int t=1; t <= LAST_THREAD; t*=2) {
         initialize_splay_tree();
         benchmark(1, t);
-        clear_splay_tree(0);
+        clear_test_splay_tree();
     }
     debug_print("\nBenchmark 2: 33%% inserts, 33%% finds, 33%% deletes\n====================================================\n");
     printf("\n");
     for (int t=1; t <= LAST_THREAD; t*=2) {
         initialize_splay_tree();
         benchmark(2, t);
-        clear_splay_tree(0);
+        clear_test_splay_tree();
     }
     debug_print("\nBenchmark 3: 25%% inserts, 50%% finds, 25%% deletes\n====================================================\n");
     printf("\n");
     for (int t=1; t <= LAST_THREAD; t*=2) {
         initialize_splay_tree();
         benchmark(3, t);
-        clear_splay_tree(0);
+        clear_test_splay_tree();
     }
     debug_print("\nBenchmark 4: 15%% inserts, 70%% finds, 15%% deletes\n====================================================\n");
     printf("\n");
     for (int t=1; t <= LAST_THREAD; t*=2) {
         initialize_splay_tree();
         benchmark(4, t);
-        clear_splay_tree(0);
+        clear_test_splay_tree();
     }
     debug_print("\nBenchmark 5: 5%% inserts, 90%% finds, 5%% deletes\n====================================================\n");
     printf("\n");
     for (int t=1; t <= LAST_THREAD; t*=2) {
         initialize_splay_tree();
         benchmark(5, t);
-        clear_splay_tree(0);
+        clear_test_splay_tree();
     }
-    clear_splay_tree(1);
 }

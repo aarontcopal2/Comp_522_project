@@ -58,8 +58,8 @@ size
 
 
 void
-clear_splay_tree(
-    int delete_root
+clear_test_splay_tree(
+    void
 );
 
 #endif  // test_splay_tree_h

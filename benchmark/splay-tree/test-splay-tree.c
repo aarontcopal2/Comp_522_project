@@ -103,18 +103,21 @@ test_splay_new
 }
 
 
-static void free_splay_tree(test_splay_entry_t *node, int delete_root) {
+static void free_splay_tree(test_splay_entry_t *node) {
     // we dont want to delete the root
-    if (node == NULL || (node == splay_root && !delete_root)) {
+    if (node == NULL) {
         return;
     }
 
     /* first recur on left child */
-    free_splay_tree(node->left, delete_root);
+    free_splay_tree(node->left);
 
     /* now recur on right child */
-    free_splay_tree(node->right, delete_root);
+    free_splay_tree(node->right);
 
+    if (node == splay_root) {
+        splay_root = NULL;
+    }
     // freeing the node
     free(node);
 }
@@ -202,6 +205,6 @@ uint64_t size() {
 
 
 void
-clear_splay_tree(int delete_root) {
-    free_splay_tree(splay_root, delete_root);
+clear_test_splay_tree() {
+    free_splay_tree(splay_root);
 }

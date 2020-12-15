@@ -1,5 +1,5 @@
-#ifndef address_splay_tree_h
-#define address_splay_tree_h
+#ifndef test_splay_tree_h
+#define test_splay_tree_h
 
 //******************************************************************************
 // local includes
@@ -13,7 +13,7 @@
 // type definitions
 //******************************************************************************
 
-typedef struct address_splay_entry_t address_splay_entry_t;
+typedef struct test_splay_entry_t test_splay_entry_t;
 
 
 
@@ -21,15 +21,15 @@ typedef struct address_splay_entry_t address_splay_entry_t;
 // interface operations
 //******************************************************************************
 
-address_splay_entry_t*
-address_splay_lookup
+test_splay_entry_t*
+test_splay_lookup
 (
  uint64_t key
 );
 
 
 void
-address_splay_insert
+test_splay_insert
 (
  uint64_t key,
  uint64_t val
@@ -37,14 +37,14 @@ address_splay_insert
 
 
 void
-address_splay_delete
+test_splay_delete
 (
  uint64_t key
 );
 
 
 uint64_t
-address_splay_entry_val_get
+test_splay_entry_val_get
 (
  uint64_t key
 );
@@ -62,4 +62,4 @@ clear_splay_tree(
     int delete_root
 );
 
-#endif  // address_splay_tree_h
+#endif  // test_splay_tree_h

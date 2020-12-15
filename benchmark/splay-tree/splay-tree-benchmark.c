@@ -13,7 +13,7 @@
 //******************************************************************************
 
 #include "../hashtable/splay-tree/splay-uint64.h"
-#include "address-splay-tree.h"
+#include "test-splay-tree.h"
 #include "benchmark.h"
 
 
@@ -37,7 +37,7 @@ static void initialize_splay_tree() {
     for (int i = 0; i < LOWER; i++) {
         uint64_t key = i;
         uint64_t val = key >> 1;
-        address_splay_insert(key, val);
+        test_splay_insert(key, val);
     }
 }
 
@@ -60,8 +60,8 @@ static void *benchmark1_operations(void *arg) {
         key = random_key();
         val = key >> 1;
 
-        address_splay_insert(key, val);
-        address_splay_delete(key);
+        test_splay_insert(key, val);
+        test_splay_delete(key);
     }
 }
 
@@ -109,9 +109,9 @@ static void *benchmark2_operations(void *arg) {
         key = random_key();
         val = key >> 1;
 
-        address_splay_insert(key, val);
-        result_val = address_splay_entry_val_get(key);
-        address_splay_delete(key);
+        test_splay_insert(key, val);
+        result_val = test_splay_entry_val_get(key);
+        test_splay_delete(key);
     }
 }
 
@@ -161,10 +161,10 @@ static void *benchmark3_operations(void *arg) {
         val = key1 >> 1;
         
 
-        address_splay_insert(key1, val);
-        result_val1 = address_splay_entry_val_get(key1);
-        result_val2 = address_splay_entry_val_get(key2);
-        address_splay_delete(key1);
+        test_splay_insert(key1, val);
+        result_val1 = test_splay_entry_val_get(key1);
+        result_val2 = test_splay_entry_val_get(key2);
+        test_splay_delete(key1);
     }
 }
 
@@ -216,13 +216,13 @@ static void *benchmark4_operations(void *arg) {
         key5 = random_key();
         val = key1 >> 1;
 
-        address_splay_insert(key1, val);
-        result_val1 = address_splay_entry_val_get(key1);
-        result_val2 = address_splay_entry_val_get(key2);
-        result_val3 = address_splay_entry_val_get(key3);
-        result_val4 = address_splay_entry_val_get(key4);
-        result_val5 = address_splay_entry_val_get(key5);
-        address_splay_delete(key1);
+        test_splay_insert(key1, val);
+        result_val1 = test_splay_entry_val_get(key1);
+        result_val2 = test_splay_entry_val_get(key2);
+        result_val3 = test_splay_entry_val_get(key3);
+        result_val4 = test_splay_entry_val_get(key4);
+        result_val5 = test_splay_entry_val_get(key5);
+        test_splay_delete(key1);
     }
 }
 
@@ -269,13 +269,13 @@ static void *benchmark5_operations(void *arg) {
     for (int i = 0; i < iterations; i++) {
         for (int j = 0; j < 17; j++) {
             key = random_key();
-            result_val = address_splay_entry_val_get(key);
+            result_val = test_splay_entry_val_get(key);
         }
         key = random_key();
         val = key >> 1;
-        address_splay_insert(key, val);
-        result_val = address_splay_entry_val_get(key);
-        address_splay_delete(key);
+        test_splay_insert(key, val);
+        result_val = test_splay_entry_val_get(key);
+        test_splay_delete(key);
     }
 }
 

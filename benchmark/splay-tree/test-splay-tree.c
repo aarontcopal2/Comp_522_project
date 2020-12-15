@@ -16,7 +16,7 @@
 #include "../../hashtable/splay-tree/splay-uint64.h"
 #include "../../hashtable/channel/lib/prof-lean/spinlock.h"
 #include "../../hashtable/channel/hpcrun/gpu/gpu-splay-allocator.h"
-#include "address-splay-tree.h"
+#include "test-splay-tree.h"
 
 
 
@@ -40,13 +40,13 @@
     typed_splay_count(int)
 
 #define st_alloc(free_list) \
-    typed_splay_alloc(free_list, address_splay_entry_t)
+    typed_splay_alloc(free_list, test_splay_entry_t)
 
 #define st_free(free_list, node) \
     typed_splay_free(free_list, node)
 
 #undef typed_splay_node
-#define typed_splay_node(int) address_splay_entry_t
+#define typed_splay_node(int) test_splay_entry_t
 
 // we have a special case where we only need to search for keys,
 // we are not concerned with the value. Can we remove the value parameter from the struct?
@@ -66,11 +66,11 @@ typed_splay_impl(int)
 // local data
 //******************************************************************************
 
-static address_splay_entry_t *splay_root = NULL;
-static address_splay_entry_t *splay_free_list = NULL;
+static test_splay_entry_t *splay_root = NULL;
+static test_splay_entry_t *splay_free_list = NULL;
 
 
-static spinlock_t address_splay_lock = SPINLOCK_UNLOCKED;
+static spinlock_t test_splay_lock = SPINLOCK_UNLOCKED;
 
 
 
@@ -78,8 +78,8 @@ static spinlock_t address_splay_lock = SPINLOCK_UNLOCKED;
 // private operations
 //******************************************************************************
 
-static address_splay_entry_t *
-address_splay_alloc
+static test_splay_entry_t *
+test_splay_alloc
 (
     void
 )
@@ -88,14 +88,14 @@ address_splay_alloc
 }
 
 
-static address_splay_entry_t *
-address_splay_new
+static test_splay_entry_t *
+test_splay_new
 (
     uint64_t key,
     uint64_t val
 )
 {
-    address_splay_entry_t *e = malloc(sizeof(address_splay_entry_t));
+    test_splay_entry_t *e = malloc(sizeof(test_splay_entry_t));
     e->left = e->right = NULL;
     e->key = key;
     e->val = val;
@@ -103,7 +103,7 @@ address_splay_new
 }
 
 
-static void free_splay_tree(address_splay_entry_t *node, int delete_root) {
+static void free_splay_tree(test_splay_entry_t *node, int delete_root) {
     // we dont want to delete the root
     if (node == NULL || (node == splay_root && !delete_root)) {
         return;
@@ -125,65 +125,65 @@ static void free_splay_tree(address_splay_entry_t *node, int delete_root) {
 // interface operations
 //******************************************************************************
 
-address_splay_entry_t*
-address_splay_lookup
+test_splay_entry_t*
+test_splay_lookup
 (
     uint64_t key
 )
 {
-    ANNOTATE_RWLOCK_ACQUIRED(&address_splay_lock, 1);
-    spinlock_lock(&address_splay_lock);
-    address_splay_entry_t *result = st_lookup(&splay_root, key);
-    spinlock_unlock(&address_splay_lock);
-    ANNOTATE_RWLOCK_RELEASED(&address_splay_lock, 1);
+    ANNOTATE_RWLOCK_ACQUIRED(&test_splay_lock, 1);
+    spinlock_lock(&test_splay_lock);
+    test_splay_entry_t *result = st_lookup(&splay_root, key);
+    spinlock_unlock(&test_splay_lock);
+    ANNOTATE_RWLOCK_RELEASED(&test_splay_lock, 1);
     return result;
 }
 
 
 void
-address_splay_insert
+test_splay_insert
 (
     uint64_t key,
     uint64_t val
 )
 {
-    if (address_splay_lookup(key)) {
+    if (test_splay_lookup(key)) {
         // Do nothing, entry for a given key should be inserted only once
     } else {
-        ANNOTATE_RWLOCK_ACQUIRED(&address_splay_lock, 1);
-        spinlock_lock(&address_splay_lock);
-        address_splay_entry_t *entry = address_splay_new(key, val);
+        ANNOTATE_RWLOCK_ACQUIRED(&test_splay_lock, 1);
+        spinlock_lock(&test_splay_lock);
+        test_splay_entry_t *entry = test_splay_new(key, val);
         st_insert(&splay_root, entry);  
-        spinlock_unlock(&address_splay_lock);
-        ANNOTATE_RWLOCK_RELEASED(&address_splay_lock, 1);
+        spinlock_unlock(&test_splay_lock);
+        ANNOTATE_RWLOCK_RELEASED(&test_splay_lock, 1);
     }
 }
 
 
 void
-address_splay_delete
+test_splay_delete
 (
     uint64_t key
 )
 {
-    ANNOTATE_RWLOCK_ACQUIRED(&address_splay_lock, 1);
-    spinlock_lock(&address_splay_lock);
-    address_splay_entry_t *node = st_delete(&splay_root, key);
+    ANNOTATE_RWLOCK_ACQUIRED(&test_splay_lock, 1);
+    spinlock_lock(&test_splay_lock);
+    test_splay_entry_t *node = st_delete(&splay_root, key);
     //st_free(&splay_free_list, node);
     free(node);
-    spinlock_unlock(&address_splay_lock);
-    ANNOTATE_RWLOCK_RELEASED(&address_splay_lock, 1);
+    spinlock_unlock(&test_splay_lock);
+    ANNOTATE_RWLOCK_RELEASED(&test_splay_lock, 1);
 
 }
 
 
 uint64_t
-address_splay_entry_val_get
+test_splay_entry_val_get
 (
     uint64_t key
 )
 {
-    address_splay_entry_t *e = address_splay_lookup(key);
+    test_splay_entry_t *e = test_splay_lookup(key);
     if (!e) {
         return -1;
     }
@@ -192,11 +192,11 @@ address_splay_entry_val_get
 
 
 uint64_t size() {
-    ANNOTATE_RWLOCK_ACQUIRED(&address_splay_lock, 1);
-    spinlock_lock(&address_splay_lock);
+    ANNOTATE_RWLOCK_ACQUIRED(&test_splay_lock, 1);
+    spinlock_lock(&test_splay_lock);
     uint64_t size = st_count(splay_root);
-    spinlock_unlock(&address_splay_lock);
-    ANNOTATE_RWLOCK_RELEASED(&address_splay_lock, 1);
+    spinlock_unlock(&test_splay_lock);
+    ANNOTATE_RWLOCK_RELEASED(&test_splay_lock, 1);
     return size;
 }
 

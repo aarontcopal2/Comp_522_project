@@ -8,7 +8,7 @@ LIBS=-latomic -lpthread
 BUILD_DIR=hashtable/build
 # BUILD_OBJS = $(wildcard $(BUILD_DIR)/*.o) make needs to run twice for this to work
 HASHTABLE_BUILD_OBJS=hashtable/build/spinlock.o hashtable/build/gpu-splay-allocator.o hashtable/build/stacks.o hashtable/build/bistack.o hashtable/build/bichannel.o hashtable/build/gpu-channel-item-allocator.o hashtable/build/hashtable-memory-manager.o hashtable/build/splay-uint64.o hashtable/build/Micheal-splay-tree.o hashtable/build/Micheal-Lock-Free-List.o hashtable/build/Split-Ordered-Lists.o
-BENCHMARK_BUILD_OBJS=benchmark/build/benchmark.o benchmark/build/address-splay-tree.o benchmark/build/splay-tree-benchmark.o benchmark/build/Split-Ordered-Lists-benchmark.o
+BENCHMARK_BUILD_OBJS=benchmark/build/benchmark.o benchmark/build/test-splay-tree.o benchmark/build/splay-tree-benchmark.o benchmark/build/Split-Ordered-Lists-benchmark.o
 HELGRIND_PARAMS=--free-is-write=yes --history-level=full --show-error-list=yes --suppressions=$(shell pwd)/helgrind_suppression.supp
 MEMCHECK_PARAMS=--leak-check=full --track-origins=yes
 

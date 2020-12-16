@@ -33,18 +33,29 @@
 //******************************************************************************
 
 static void initialize_splay_tree() {
-    // initializing the splay tree with 1.5k elements
+    // initializing the splay tree with 50k elements
+    uint64_t key, val;
     for (int i = 0; i < LOWER; i++) {
-        uint64_t key = i;
-        uint64_t val = key >> 1;
+        key = i;
+        val = key >> 1;
         test_splay_insert(key, val);
     }
 }
 
 
-static uint64_t random_key() {
+static uint64_t random_search_key() {
+    return rand() % UPPER;
+}
+
+
+static uint64_t random_insert_key() {
     return (rand() % 
            (UPPER - LOWER)) + LOWER;
+}
+
+
+static uint64_t random_delete_key() {
+    return rand() % LOWER;
 }
 
 
@@ -54,14 +65,14 @@ static void *benchmark1_operations(void *arg) {
     int iterations = *(int*)arg;
     iterations /= 2;
     
-    uint64_t key, val, result_val;
+    uint64_t key_i, key_d, val1;
 
     for (int i = 0; i < iterations; i++) {
-        key = random_key();
-        val = key >> 1;
-
-        test_splay_insert(key, val);
-        test_splay_delete(key);
+        key_i = random_insert_key();
+        val1 = key_i >> 1;
+        test_splay_insert(key_i, val1);
+        key_d = random_delete_key();
+        test_splay_delete(key_d);
     }
 }
 
@@ -72,15 +83,16 @@ static void *benchmark2_operations(void *arg) {
     int iterations = *(int*)arg;
     iterations /= 3;
     
-    uint64_t key, val, result_val;
+    uint64_t key_i, key_s, key_d, val, result_val;
 
     for (int i = 0; i < iterations; i++) {
-        key = random_key();
-        val = key >> 1;
-
-        test_splay_insert(key, val);
-        result_val = test_splay_entry_val_get(key);
-        test_splay_delete(key);
+        key_i = random_insert_key();
+        val = key_i >> 1;
+        test_splay_insert(key_i, val);
+        key_s = random_search_key();
+        result_val = test_splay_entry_val_get(key_s);
+        key_d = random_delete_key();        
+        test_splay_delete(key_d);
     }
 }
 
@@ -91,18 +103,18 @@ static void *benchmark3_operations(void *arg) {
     int iterations = *(int*)arg;
     iterations /= 4;
     
-    uint64_t key1, key2, val, result_val1, result_val2;
+    uint64_t key_i, key_s, key_d, val, result_val;
 
     for (int i = 0; i < iterations; i++) {
-        key1 = random_key();
-        key2 = random_key();
-        val = key1 >> 1;
-        
-
-        test_splay_insert(key1, val);
-        result_val1 = test_splay_entry_val_get(key1);
-        result_val2 = test_splay_entry_val_get(key2);
-        test_splay_delete(key1);
+        key_i = random_insert_key();
+        val = key_i >> 1;
+        test_splay_insert(key_i, val);
+        for (int j = 0; j < 2; j++) {
+            key_s = random_search_key();
+            result_val = test_splay_entry_val_get(key_s);
+        }
+        key_d = random_delete_key();
+        test_splay_delete(key_d);
     }
 }
 
@@ -113,23 +125,18 @@ static void *benchmark4_operations(void *arg) {
     int iterations = *(int*)arg;
     iterations /= 7;
     
-    uint64_t key1, key2, key3, key4, key5, val, result_val1, result_val2, result_val3, result_val4, result_val5;
+    uint64_t key_i, key_s, key_d, val, result_val;
 
     for (int i = 0; i < iterations; i++) {
-        key1 = random_key();
-        key2 = random_key();
-        key3 = random_key();
-        key4 = random_key();
-        key5 = random_key();
-        val = key1 >> 1;
-
-        test_splay_insert(key1, val);
-        result_val1 = test_splay_entry_val_get(key1);
-        result_val2 = test_splay_entry_val_get(key2);
-        result_val3 = test_splay_entry_val_get(key3);
-        result_val4 = test_splay_entry_val_get(key4);
-        result_val5 = test_splay_entry_val_get(key5);
-        test_splay_delete(key1);
+        key_i = random_insert_key();
+        val = key_i >> 1;
+        test_splay_insert(key_i, val);
+        for (int j = 0; j < 5; j++) {
+            key_s = random_search_key();
+            result_val = test_splay_entry_val_get(key_s);
+        }
+        key_d = random_delete_key();
+        test_splay_delete(key_d);
     }
 }
 
@@ -140,18 +147,18 @@ static void *benchmark5_operations(void *arg) {
     int iterations = *(int*)arg;
     iterations /= 20;
     
-    uint64_t key, val, result_val;
+    uint64_t key_i, key_s, key_d, val, result_val;
 
     for (int i = 0; i < iterations; i++) {
-        for (int j = 0; j < 17; j++) {
-            key = random_key();
-            result_val = test_splay_entry_val_get(key);
+        key_i = random_insert_key();
+        val = key_i >> 1;
+        test_splay_insert(key_i, val);
+        for (int j = 0; j < 18; j++) {
+            key_s = random_search_key();
+            result_val = test_splay_entry_val_get(key_s);
         }
-        key = random_key();
-        val = key >> 1;
-        test_splay_insert(key, val);
-        result_val = test_splay_entry_val_get(key);
-        test_splay_delete(key);
+        key_d = random_delete_key();
+        test_splay_delete(key_d);
     }
 }
 

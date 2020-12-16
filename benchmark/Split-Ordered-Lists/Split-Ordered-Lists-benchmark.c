@@ -38,7 +38,7 @@ hashtable *htab;
 //******************************************************************************
 
 static void *add_initial_elements(void *arg) {
-    // initializing the hash table with 1.5k elements
+    // initializing the hash table with 50k elements
     bool status;
     t_key key, temp_val;
     val_t val;
@@ -58,9 +58,19 @@ static void initial_hashtable_population() {
 }
 
 
-static uint64_t random_key() {
+static uint64_t random_search_key() {
+    return rand() % UPPER;
+}
+
+
+static uint64_t random_insert_key() {
     return (rand() % 
            (UPPER - LOWER)) + LOWER;
+}
+
+
+static uint64_t random_delete_key() {
+    return rand() % LOWER;
 }
 
 
@@ -70,16 +80,16 @@ static void *benchmark1_operations(void *arg) {
     int iterations = *(int*)arg;
     iterations /= 2;
     
-    t_key key, temp_val;
+    t_key key_i, key_d, temp_val;
     val_t val;
 
     for (int i = 0; i < iterations; i++) {
-        key = random_key();
-        temp_val = key >> 1;
+        key_i = random_insert_key();
+        temp_val = key_i >> 1;
         val = (void*)&temp_val;
-
-        status = map_insert(htab, key, val);
-        status = map_delete(htab, key);
+        status = map_insert(htab, key_i, val);
+        key_d = random_delete_key();
+        status = map_delete(htab, key_d);
     }
 }
 
@@ -90,17 +100,18 @@ static void *benchmark2_operations(void *arg) {
     int iterations = *(int*)arg;
     iterations /= 3;
     
-    t_key key, temp_val;
+    t_key key_i, key_s, key_d, temp_val;
     val_t val, result_val;
 
     for (int i = 0; i < iterations; i++) {
-        key = random_key();
-        temp_val = key >> 1;
+        key_i = random_insert_key();
+        temp_val = key_i >> 1;
         val = (void*)&temp_val;
-
-        status = map_insert(htab, key, val);
-        result_val = map_search(htab, key);
-        status = map_delete(htab, key);
+        status = map_insert(htab, key_i, val);
+        key_s = random_search_key();
+        result_val = map_search(htab, key_s);
+        key_d = random_delete_key();
+        status = map_delete(htab, key_d);
     }
 }
 
@@ -111,19 +122,20 @@ static void *benchmark3_operations(void *arg) {
     int iterations = *(int*)arg;
     iterations /= 4;
     
-    t_key key1, key2, temp_val;
-    val_t val, result_val1, result_val2;
+    t_key key_i, key_s, key_d, temp_val;
+    val_t val, result_val;
 
     for (int i = 0; i < iterations; i++) {
-        key1 = random_key();
-        key2 = random_key();
-        temp_val = key1 >> 1;
+        key_i = random_insert_key();
+        temp_val = key_i >> 1;
         val = (void*)&temp_val;
-
-        status = map_insert(htab, key1, val);
-        result_val1 = map_search(htab, key1);
-        result_val2 = map_search(htab, key2);
-        status = map_delete(htab, key1);
+        status = map_insert(htab, key_i, val);
+        for (int j = 0; j < 2; j++) {
+            key_s = random_search_key();
+            result_val = map_search(htab, key_s);
+        }
+        key_d = random_delete_key();
+        status = map_delete(htab, key_d);
     }
 }
 
@@ -132,26 +144,22 @@ static void *benchmark4_operations(void *arg) {
     // 15% inserts, 70% finds, 15% deletes
     bool status;
     int iterations = *(int*)arg;
+    iterations /= 7;
     
-    t_key key1, key2, key3, key4, key5, temp_val;
-    val_t val, result_val1, result_val2, result_val3, result_val4, result_val5;
+    t_key key_i, key_s, key_d, temp_val;
+    val_t val, result_val;
 
     for (int i = 0; i < iterations; i++) {
-        key1 = random_key();
-        key2 = random_key();
-        key3 = random_key();
-        key4 = random_key();
-        key5 = random_key();
-        temp_val = key1 >> 1;
+        key_i = random_insert_key();
+        temp_val = key_i >> 1;
         val = (void*)&temp_val;
-
-        status = map_insert(htab, key1, val);
-        result_val1 = map_search(htab, key1);
-        result_val2 = map_search(htab, key2);
-        result_val3 = map_search(htab, key3);
-        result_val4 = map_search(htab, key4);
-        result_val5 = map_search(htab, key5);
-        status = map_delete(htab, key1);
+        status = map_insert(htab, key_i, val);
+        for (int j = 0; j < 5; j++) {
+            key_s = random_search_key();
+            result_val = map_search(htab, key_s);
+        }
+        key_d = random_delete_key();
+        status = map_delete(htab, key_d);
     }
 }
 
@@ -160,22 +168,22 @@ static void *benchmark5_operations(void *arg) {
     // 5% inserts, 90% finds, 5% deletes
     bool status;
     int iterations = *(int*)arg;
+    iterations /= 20;
     
-    t_key key, temp_val;
+    t_key key_i, key_s, key_d, temp_val;
     val_t val, result_val;
 
     for (int i = 0; i < iterations; i++) {
-        for (int j = 0; j < 17; j++) {
-            key = random_key();
-            result_val = map_search(htab, key);
-        }
-        key = random_key();
-        temp_val = key >> 1;
+        key_i = random_insert_key();
+        temp_val = key_i >> 1;
         val = (void*)&temp_val;
-
-        status = map_insert(htab, key, val);
-        result_val = map_search(htab, key);
-        status = map_delete(htab, key);
+        status = map_insert(htab, key_i, val);
+        for (int j = 0; j < 18; j++) {
+            key_s = random_search_key();
+            result_val = map_search(htab, key_s);
+        }
+        key_d = random_delete_key();
+        status = map_delete(htab, key_d);
     }
 }
 

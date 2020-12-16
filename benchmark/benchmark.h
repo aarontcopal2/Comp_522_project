@@ -15,12 +15,12 @@
 // local data
 //******************************************************************************
 
-#define LOWER 1500
-#define UPPER 200000
+#define LOWER 50000
+#define UPPER 20000000
 
 // ITERATION_SIZE is a multiple of 2 since the thread counts are a factor of 2
-#define ITERATION_SIZE 256
-//4096, 32768, 524288 
+#define ITERATION_SIZE 1048576
+//4096, 32768, 524288, 1048576, 4194304, 8388608
 
 #define LAST_THREAD 32
 
